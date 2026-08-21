@@ -6,13 +6,14 @@ import Dashboard from './components/Dashboard';
 import Home from './components/Home';
 import OceanMap from './components/OceanMap';
 import MetricMap from './components/MetricMap';
+import GlobeMap from './components/GlobeMap';
 import { Bot, X } from 'lucide-react';
 
 function OceanVizApp() {
     const [chatOpen, setChatOpen] = useState(false);
     const [activePage, setActivePage] = useState('Home');
 
-    const isFullScreenMap = ['Argo Floats', 'Salinity', 'Temperature', 'Pressure'].includes(activePage);
+    const isFullScreenMap = ['Argo Floats', 'Salinity', 'Temperature', 'Pressure', '3D Globe'].includes(activePage);
 
     return (
         <div className="h-screen flex flex-col text-white w-full overflow-hidden" style={{ background: 'transparent' }}>
@@ -44,6 +45,7 @@ function OceanVizApp() {
                     {activePage === 'Salinity' && <MetricMap metric="salinity" />}
                     {activePage === 'Temperature' && <MetricMap metric="temperature" />}
                     {activePage === 'Pressure' && <MetricMap metric="pressure" />}
+                    {activePage === '3D Globe' && <GlobeMap />}
                 </motion.div>
             </AnimatePresence>
 

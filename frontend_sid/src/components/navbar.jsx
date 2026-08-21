@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { LayoutDashboard, Home, Map, Thermometer, Droplets, Gauge, ChartNoAxesCombined, Menu, X } from "lucide-react";
+import { LayoutDashboard, Home, Map, Thermometer, Droplets, Gauge, ChartNoAxesCombined, Menu, X, Globe } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import logo from '../assets/logo.png';
 
@@ -17,6 +17,7 @@ function Navbar({ activePage, setActivePage }) {
         { name: "Home",          icon: <Home size={15} /> },
         { name: "Depth Profiles", icon: <ChartNoAxesCombined size={15} /> },
         { name: "Argo Floats",   icon: <Map size={15} /> },
+        { name: "3D Globe",      icon: <Globe size={15} /> },
         { name: "Temperature",   icon: <Thermometer size={15} /> },
         { name: "Salinity",      icon: <Droplets size={15} /> },
         { name: "Pressure",      icon: <Gauge size={15} /> },
