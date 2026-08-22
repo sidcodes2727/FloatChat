@@ -14,39 +14,59 @@ const INITIAL_VIEW_STATE = { longitude: 0, latitude: 0, zoom: 2, pitch: 0, beari
 
 const LAND_GEOJSON_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_land.geojson';
 
+// Palette Colors RGB
+// Deep Navy: 9, 21, 64
+// Royal Blue: 27, 44, 193
+// Periwinkle Blue: 118, 146, 255
+// Light Ocean Blue: 171, 210, 250
 
 function getColor(value, metric) {
   if (!Number.isFinite(value)) value = 0;
+  
+  // Custom interpolation between our precise colors:
+  // Deep Navy -> Royal Blue -> Periwinkle Blue -> Light Ocean Blue
+  const STOPS = [
+    [9, 21, 64],
+    [27, 44, 193],
+    [118, 146, 255],
+    [171, 210, 250],
+  ];
+  
+  let t = 0;
   switch (metric) {
-    case 'salinity': {
-      // 30-38 PSU mapped to purple shades ending at #b103fc
-      const t = Math.max(0, Math.min(1, (value - 30) / 8));
-      const start = [220, 190, 255]; // light lavender
-      const end = [177, 3, 252];     // #b103fc
-      const r = Math.round(start[0] + (end[0] - start[0]) * t);
-      const g = Math.round(start[1] + (end[1] - start[1]) * t);
-      const b = Math.round(start[2] + (end[2] - start[2]) * t);
-      return [r, g, b];
-    }
-    case 'temperature': {
-      // 0-30C from blue to red
-      const t = Math.max(0, Math.min(1, value / 30));
-      const r = Math.floor(30 + 225 * t);
-      const g = Math.floor(80 + 120 * t);
-      const b = Math.floor(220 - 200 * t);
-      return [r, g, b];
-    }
-    case 'pressure': {
-      // 0-1000 dbar from teal to magenta
-      const t = Math.max(0, Math.min(1, value / 1000));
-      const r = Math.floor(20 + 235 * t);    // 20 -> 255
-      const g = Math.floor(200 - 160 * t);   // 200 -> 40
-      const b = Math.floor(180 + 60 * t);    // 180 -> 240
-      return [r, g, b];
-    }
+    case 'salinity':
+      // 30-38 PSU
+      t = Math.max(0, Math.min(1, (value - 30) / 8));
+      break;
+    case 'temperature':
+      // 0-30C
+      t = Math.max(0, Math.min(1, value / 30));
+      break;
+    case 'pressure':
+      // 0-1000 dbar
+      t = Math.max(0, Math.min(1, value / 1000));
+      break;
     default:
-      return [0, 200, 255];
+      t = 0;
   }
+
+  // Linear interpolation across the 4 color stops
+  const segments = STOPS.length - 1;
+  const scaledT = t * segments;
+  const index = Math.floor(scaledT);
+  const frac = scaledT - index;
+
+  if (index >= segments) return STOPS[segments];
+  if (index < 0) return STOPS[0];
+
+  const c1 = STOPS[index];
+  const c2 = STOPS[index + 1];
+
+  return [
+    Math.round(c1[0] + (c2[0] - c1[0]) * frac),
+    Math.round(c1[1] + (c2[1] - c1[1]) * frac),
+    Math.round(c1[2] + (c2[2] - c1[2]) * frac)
+  ];
 }
 
 // Legend specification per metric
@@ -159,54 +179,15 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
     return () => cancelAnimationFrame(animationFrame);
   }, [isPlaying, timeRange]);
 
-  // Build a robust 6-stop RGBA color range for the heatmap
-  const heatColors = useMemo(() => {
-    const spec = getLegendSpec(metric);
-    const values = [
-      spec.min,
-      spec.min + (spec.max - spec.min) * 0.2,
-      spec.min + (spec.max - spec.min) * 0.4,
-      spec.min + (spec.max - spec.min) * 0.6,
-      spec.min + (spec.max - spec.min) * 0.8,
-      spec.max
-    ];
-    return values.map(v => {
-      const [r, g, b] = getColor(v, metric);
-      return [r, g, b, 255];
-    });
-  }, [metric]);
-
-  // Temperature-like color range (blue -> red) for HeatmapLayer (RGBA)
-  const TEMP_RANGE = useMemo(() => ([
-    [30, 80, 220, 255],
-    [60, 100, 200, 255],
-    [90, 120, 180, 255],
-    [130, 140, 150, 255],
-    [170, 160, 120, 255],
-    [200, 175, 90, 255],
-    [230, 190, 60, 255],
-    [255, 200, 20, 255]
-  ]), []);
-
-  // Salinity palette (teal -> cyan -> blue -> purple)
-  const SALINITY_RANGE = useMemo(() => ([
-    [240, 220, 255, 255], // very light lavender
-    [230, 200, 255, 255],
-    [215, 170, 255, 255],
-    [200, 140, 255, 255],
-    [190, 100, 255, 255],
-    [183, 50, 253, 255],
-    [177, 3, 252, 255]   // #b103fc
-  ]), []);
-
-  // Pressure palette (teal -> green -> yellow -> orange -> magenta)
-  const PRESSURE_RANGE = useMemo(() => ([
-    [20, 160, 180, 255],
-    [40, 200, 140, 255],
-    [180, 210, 60, 255],
-    [230, 160, 40, 255],
-    [240, 100, 80, 255],
-    [250, 60, 160, 255]
+  // Unified color scale for heatmaps
+  const SCIENTIFIC_RANGE = useMemo(() => ([
+    [9, 21, 64, 255],     // Deep Navy
+    [15, 30, 110, 255],   // Transition
+    [27, 44, 193, 255],   // Royal Blue
+    [65, 80, 210, 255],   // Transition
+    [118, 146, 255, 255], // Periwinkle Blue
+    [145, 175, 252, 255], // Transition
+    [171, 210, 250, 255], // Light Ocean Blue
   ]), []);
 
   // Heatmap layer for continuous surface
@@ -225,22 +206,22 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
     radiusPixels: Math.max(18, Math.min(90, Math.round(18 * (viewState?.zoom || 2)))),
     intensity: 1.0,
     threshold: 0.05,
-    colorRange: metric === 'salinity' ? SALINITY_RANGE : metric === 'pressure' ? PRESSURE_RANGE : TEMP_RANGE,
+    colorRange: SCIENTIFIC_RANGE,
     weightsTextureSize: 512,
-  }), [filteredRows, metric, viewState, TEMP_RANGE, SALINITY_RANGE, PRESSURE_RANGE]);
+  }), [filteredRows, metric, viewState, SCIENTIFIC_RANGE]);
 
-  // Black dot markers for actual coordinates
+  // White dot markers for actual coordinates
   const pointsLayer = useMemo(() => new ScatterplotLayer({
     id: `${metric}-points`,
     data: filteredRows,
     pickable: true,
     opacity: 0.95,
     radiusScale: 10,
-    radiusMinPixels: 3,
+    radiusMinPixels: 2,
     radiusMaxPixels: 30,
     getPosition: (d) => [Number(d.longitude) > 180 ? Number(d.longitude) - 360 : Number(d.longitude), Number(d.latitude)],
     getRadius: () => 4,
-    getFillColor: [0, 0, 0], // black dots
+    getFillColor: [171, 210, 250],
     getLineColor: [255, 255, 255],
     lineWidthUnits: 'pixels',
     stroked: true,
@@ -267,7 +248,7 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
       data: land,
       stroked: false,
       filled: true,
-      getFillColor: [14, 18, 24, 255], // close to basemap land color
+      getFillColor: [9, 21, 64, 255], // Deep Navy land
       parameters: { depthTest: false },
       pickable: false,
     });
@@ -294,12 +275,12 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
       if (val == null) return null;
       const pct = Math.min(100, Math.max(0, (val / max) * 100));
       return (
-         <div className="mt-1.5">
-            <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
-               <span>{label}</span>
-               <span className="font-mono">{Number(val).toFixed(1)}</span>
+         <div className="mt-2">
+            <div className="flex justify-between text-[10px] text-muted-foreground mb-1 font-mono">
+               <span className="uppercase tracking-widest">{label}</span>
+               <span className="text-foreground font-semibold">{Number(val).toFixed(1)}</span>
             </div>
-            <div className="w-full bg-black/40 h-1.5 rounded-full overflow-hidden">
+            <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
             </div>
          </div>
@@ -319,17 +300,17 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
       {/* Time Slider UI */}
       {timeRange && (
         <div 
-          style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', width: '80%', maxWidth: 600, zIndex: 10 }}
-          className="glass-subtle rounded-xl p-3 px-5 flex flex-col gap-2 shadow-2xl"
+          style={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', width: '80%', maxWidth: 600, zIndex: 10 }}
+          className="bg-background/95 backdrop-blur-md border border-border rounded-xl p-4 flex flex-col gap-3 shadow-lg"
         >
           <div className="flex justify-between items-center px-1">
              <button 
                 onClick={() => setIsPlaying(!isPlaying)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-muted hover:bg-muted/80 text-foreground transition-colors cursor-pointer border border-border"
              >
-                {isPlaying ? <Pause size={14} className="text-white" /> : <Play size={14} className="ml-0.5 text-white" />}
+                {isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
              </button>
-             <div className="text-white/90 font-mono text-sm tracking-wider font-semibold">
+             <div className="text-foreground font-mono text-sm tracking-widest font-semibold">
                 {new Date(currentTime).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
              </div>
           </div>
@@ -339,9 +320,9 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
              max={timeRange[1]} 
              value={currentTime} 
              onChange={(e) => { setCurrentTime(Number(e.target.value)); setIsPlaying(false); }}
-             className="w-full h-1.5 bg-white/20 rounded-full appearance-none outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer"
+             className="w-full h-2 bg-black/15 shadow-inner rounded-full appearance-none outline-none focus:ring-2 focus:ring-periwinkle cursor-pointer"
              style={{
-                accentColor: '#00d4ff'
+                accentColor: 'var(--color-royal-blue)'
              }}
           />
         </div>
@@ -349,48 +330,50 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
 
       {/* Color Legend */}
       <div
-        style={{ position: 'absolute', left: 12, bottom: 12, width: 240 }}
-        className="glass-subtle rounded-lg p-3"
+        style={{ position: 'absolute', left: 16, bottom: 24, width: 240 }}
+        className="bg-background/95 backdrop-blur-md border border-border shadow-lg rounded-lg p-4"
       >
-        <div className="flex items-center justify-between text-[11px] text-white/50 mb-2 font-medium">
-          <span className="uppercase tracking-wider">{legend.label}</span>
-          <span>{legend.unit}</span>
+        <div className="flex items-center justify-between text-[11px] text-foreground font-bold mb-3 font-mono uppercase tracking-widest border-b border-border pb-2">
+          <span>{legend.label}</span>
+          <span className="text-muted-foreground">{legend.unit}</span>
         </div>
-        <div className="h-2 w-full rounded-full overflow-hidden" style={{ background: legend.gradient }} />
-        <div className="flex items-center justify-between text-[10px] text-white/40 mt-1.5">
+        <div className="h-2.5 w-full rounded-full overflow-hidden shadow-inner" style={{ background: legend.gradient }} />
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-2 font-mono">
           <span>{legend.min}</span>
           <span>{legend.mid}</span>
           <span>{legend.max}</span>
         </div>
       </div>
+      
       {hoverInfo && (
         <div
           style={{
             position: 'absolute',
             left: Math.min(Math.max(8, hoverInfo.x + 12), window.innerWidth - 240),
-            top: Math.min(Math.max(8, hoverInfo.y + 12), window.innerHeight - 150),
+            top: Math.min(Math.max(8, hoverInfo.y + 12), window.innerHeight - 180),
           }}
-          className="tooltip-card min-w-[160px]"
+          className="bg-background border border-border shadow-lg rounded-md p-4 min-w-[200px]"
         >
-          <div className="text-white/90 text-xs font-bold mb-2 border-b border-white/10 pb-1 flex justify-between">
+          <div className="text-foreground text-xs font-bold mb-3 border-b border-border pb-2 flex justify-between font-mono tracking-wider uppercase">
             <span>Float Point</span>
-            <span className="text-white/40">{hoverInfo.coordinate[1].toFixed(2)}°, {hoverInfo.coordinate[0].toFixed(2)}°</span>
+            <span className="text-muted-foreground">{hoverInfo.coordinate[1].toFixed(2)}°, {hoverInfo.coordinate[0].toFixed(2)}°</span>
           </div>
           {hoverInfo.object ? (
             <div>
-               {renderMiniChart('Depth (m)', hoverInfo.object.depth, 2000, '#00d4ff')}
-               {metric === 'temperature' && renderMiniChart('Temp (°C)', hoverInfo.object.temperature, 35, '#ff8a65')}
-               {metric === 'salinity' && renderMiniChart('Salinity (PSU)', hoverInfo.object.salinity, 40, '#aed581')}
-               {metric === 'pressure' && renderMiniChart('Pressure (dbar)', hoverInfo.object.pressure, 2000, '#ba68c8')}
-               <div className="text-[9px] text-white/40 mt-3 text-center italic">Click to analyze with AI</div>
+               {renderMiniChart('Depth (m)', hoverInfo.object.depth, 2000, 'var(--color-light-ocean)')}
+               {metric === 'temperature' && renderMiniChart('Temp (°C)', hoverInfo.object.temperature, 35, 'var(--color-periwinkle)')}
+               {metric === 'salinity' && renderMiniChart('Salinity (PSU)', hoverInfo.object.salinity, 40, 'var(--color-royal-blue)')}
+               {metric === 'pressure' && renderMiniChart('Pressure (dbar)', hoverInfo.object.pressure, 2000, 'var(--color-periwinkle)')}
+               <div className="text-[10px] text-periwinkle mt-4 text-center font-sans opacity-80 bg-periwinkle/10 rounded py-1">Click to analyze with AI</div>
             </div>
           ) : (
-            <div className="text-white/40 text-xs">No point under cursor</div>
+            <div className="text-muted-foreground text-xs font-mono">No point under cursor</div>
           )}
         </div>
       )}
+      
       {error && (
-        <div style={{ position: 'absolute', bottom: 12, right: 12 }} className="glass-subtle rounded-lg px-3 py-2 text-red-400/80 text-xs">
+        <div style={{ position: 'absolute', top: 16, right: 16 }} className="bg-red-50 border border-red-200 shadow-md rounded-md px-4 py-2 text-red-600 text-xs font-mono">
           Failed to load {metric}: {error}
         </div>
       )}

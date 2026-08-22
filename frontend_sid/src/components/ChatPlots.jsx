@@ -3,19 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Thermometer, Droplets, Layers } from 'lucide-react';
 import { MultiLineChart, StatCard } from './ChartWidgets';
 
-// High contrast palette for distinguishing regions on multi-line chart
 const COLORS = [
-    '#00d4ff', // Cyan
-    '#f87171', // Red
-    '#a3e635', // Lime
-    '#facc15', // Yellow
-    '#c084fc', // Purple
+    'var(--color-royal-blue)',
+    'var(--color-periwinkle)',
+    'var(--color-deep-navy)',
+    '#3b82f6', // Tailwind blue-500
 ];
 
-export default function ChatPlots({ data, onClose }) {
-  if (!data || data.length === 0) return null;
-
-  // Build combined datasets for the unified charts
+export default function ChatPlots({ data, isOpen, onClose }) {
   const tempDatasets = [];
   const salDatasets = [];
   const oxyDatasets = [];
@@ -29,64 +24,62 @@ export default function ChatPlots({ data, onClose }) {
       return pts;
   }
 
-  data.forEach((summary, idx) => {
-      const regionName = summary.region.name || `Region ${idx + 1}`;
-      const color = COLORS[idx % COLORS.length];
-      const rawPoints = summary.points || [];
+  if (data && Array.isArray(data)) {
+      data.forEach((summary, idx) => {
+          const regionName = summary.region.name || `Region ${idx + 1}`;
+          const color = COLORS[idx % COLORS.length];
+          const rawPoints = summary.points || [];
 
-      const tempSeries = buildSeries(rawPoints, 'temperature');
-      if (tempSeries.length > 0) {
-          tempDatasets.push({ name: regionName, color, data: tempSeries });
-      }
+          const tempSeries = buildSeries(rawPoints, 'temperature');
+          if (tempSeries.length > 0) {
+              tempDatasets.push({ name: regionName, color, data: tempSeries });
+          }
 
-      const salSeries = buildSeries(rawPoints, 'salinity');
-      if (salSeries.length > 0) {
-          salDatasets.push({ name: regionName, color, data: salSeries });
-      }
+          const salSeries = buildSeries(rawPoints, 'salinity');
+          if (salSeries.length > 0) {
+              salDatasets.push({ name: regionName, color, data: salSeries });
+          }
 
-      const oxySeries = buildSeries(rawPoints, 'oxygen');
-      if (oxySeries.length > 0) {
-          oxyDatasets.push({ name: regionName, color, data: oxySeries });
-      }
-  });
+          const oxySeries = buildSeries(rawPoints, 'oxygen');
+          if (oxySeries.length > 0) {
+              oxyDatasets.push({ name: regionName, color, data: oxySeries });
+          }
+      });
+  }
 
   return (
     <AnimatePresence>
-      <motion.div
+      {isOpen && data && data.length > 0 && (
+        <motion.div
         initial={{ opacity: 0, x: -50, scale: 0.95 }}
         animate={{ opacity: 1, x: 0, scale: 1 }}
         exit={{ opacity: 0, x: -50, scale: 0.95 }}
         transition={{ duration: 0.3, ease: [0.34, 1.56, 0.64, 1] }}
-        className="fixed top-24 left-4 md:left-6 z-40 w-[calc(100vw-2rem)] md:w-[600px] flex flex-col overflow-hidden shadow-2xl"
+        className="fixed top-24 left-4 md:left-6 z-40 w-[calc(100vw-2rem)] md:w-[600px] flex flex-col overflow-hidden bg-background border border-border shadow-2xl rounded-2xl"
         style={{
           maxHeight: 'calc(100vh - 120px)',
-          background: 'linear-gradient(160deg, rgba(6, 18, 40, 0.97), rgba(3, 10, 22, 0.98))',
-          border: '1px solid rgba(0, 212, 255, 0.18)',
-          borderRadius: 20,
-          boxShadow: '0 0 0 1px rgba(0,212,255,0.06), 0 24px 60px rgba(0,0,0,0.7), 0 0 40px rgba(0,212,255,0.06)',
-          backdropFilter: 'blur(20px)',
         }}
       >
-        <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: '1px solid rgba(0,212,255,0.1)' }}>
-            <h3 className="text-md font-bold text-white tracking-wide" style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}>Ocean Data Comparison</h3>
-            <button onClick={onClose} className="text-white/50 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-md">
+        <div className="flex items-center justify-between px-6 py-4 shrink-0 border-b border-border bg-muted/30">
+            <h3 className="text-sm font-bold text-foreground tracking-wide uppercase font-display">Ocean Data Comparison</h3>
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground hover:bg-muted p-1.5 rounded-md transition-colors">
               <X size={16} />
             </button>
         </div>
 
-        <div className="p-5 space-y-8 overflow-y-auto w-full">
+        <div className="p-6 space-y-8 overflow-y-auto w-full">
             {/* Stat Cards for all regions */}
-            <div className="space-y-4">
+            <div className="space-y-6">
                 {data.map((summary, idx) => {
                     const regionName = summary.region.name || `Region ${idx + 1}`;
                     const color = COLORS[idx % COLORS.length];
                     return (
-                        <div key={idx}>
-                            <div className="flex items-center gap-2 mb-2">
-                               <div className="w-3 h-3 rounded-full" style={{ background: color }}></div>
-                               <h4 className="text-white font-bold text-sm" style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}>{regionName}</h4>
+                        <div key={idx} className="bg-muted/20 p-4 rounded-xl border border-border">
+                            <div className="flex items-center gap-2 mb-3">
+                               <div className="w-3 h-3 rounded-sm" style={{ background: color }}></div>
+                               <h4 className="text-foreground font-bold text-sm uppercase tracking-widest font-mono opacity-90">{regionName}</h4>
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <StatCard
                                     label="Total Records"
                                     value={summary.totals}
@@ -128,8 +121,8 @@ export default function ChatPlots({ data, onClose }) {
 
             {/* Unified Multi-Line Area Charts */}
             {(tempDatasets.length > 0 || salDatasets.length > 0 || oxyDatasets.length > 0) && (
-                <div className="grid grid-cols-1 gap-4 pt-4" style={{ borderTop: '1px solid rgba(0,212,255,0.1)' }}>
-                    <h4 className="text-white/60 font-semibold text-xs tracking-wider uppercase mb-2">Comparison Charts</h4>
+                <div className="grid grid-cols-1 gap-6 pt-6 border-t border-border">
+                    <h4 className="text-muted-foreground font-semibold text-xs tracking-widest font-mono uppercase mb-1">Comparison Charts</h4>
                     
                     {tempDatasets.length > 0 && (
                         <MultiLineChart
@@ -137,7 +130,7 @@ export default function ChatPlots({ data, onClose }) {
                             datasets={tempDatasets}
                             xLabel="Depth (m)"
                             yLabel="Temperature (°C)"
-                            icon={<Thermometer size={14} />}
+                            icon={<Thermometer size={16} />}
                         />
                     )}
                     {salDatasets.length > 0 && (
@@ -146,7 +139,7 @@ export default function ChatPlots({ data, onClose }) {
                             datasets={salDatasets}
                             xLabel="Depth (m)"
                             yLabel="Salinity (PSU)"
-                            icon={<Droplets size={14} />}
+                            icon={<Droplets size={16} />}
                         />
                     )}
                     {oxyDatasets.length > 0 && (
@@ -155,13 +148,14 @@ export default function ChatPlots({ data, onClose }) {
                             datasets={oxyDatasets}
                             xLabel="Depth (m)"
                             yLabel="Oxygen"
-                            icon={<Activity size={14} />}
+                            icon={<Activity size={16} />}
                         />
                     )}
                 </div>
             )}
         </div>
       </motion.div>
+      )}
     </AnimatePresence>
   );
 }

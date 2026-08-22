@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { LayoutDashboard, Home, Map, Thermometer, Droplets, Gauge, ChartNoAxesCombined, Menu, X, Globe } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import logo from '../assets/logo.png';
+import { cn } from "../lib/utils";
 
 function Navbar({ activePage, setActivePage }) {
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -14,13 +14,13 @@ function Navbar({ activePage, setActivePage }) {
     }, []);
 
     const navItems = [
-        { name: "Home",          icon: <Home size={15} /> },
-        { name: "Depth Profiles", icon: <ChartNoAxesCombined size={15} /> },
-        { name: "Argo Floats",   icon: <Map size={15} /> },
-        { name: "3D Globe",      icon: <Globe size={15} /> },
-        { name: "Temperature",   icon: <Thermometer size={15} /> },
-        { name: "Salinity",      icon: <Droplets size={15} /> },
-        { name: "Pressure",      icon: <Gauge size={15} /> },
+        { name: "Home",          icon: <Home size={14} /> },
+        { name: "Depth Profiles", icon: <ChartNoAxesCombined size={14} /> },
+        { name: "Argo Floats",   icon: <Map size={14} /> },
+        { name: "3D Globe",      icon: <Globe size={14} /> },
+        { name: "Temperature",   icon: <Thermometer size={14} /> },
+        { name: "Salinity",      icon: <Droplets size={14} /> },
+        { name: "Pressure",      icon: <Gauge size={14} /> },
     ];
 
     function handleNav(name) {
@@ -28,73 +28,44 @@ function Navbar({ activePage, setActivePage }) {
         setMobileOpen(false);
     }
 
+    const isDarkCanvasBg = activePage === 'Home' && !scrolled;
+
     return (
         <header
-            className="w-full sticky top-0 z-30"
-            style={{
-                backdropFilter: 'blur(20px) saturate(160%)',
-                WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-                background: scrolled
-                    ? 'linear-gradient(160deg, rgba(4, 14, 30, 0.92), rgba(2, 10, 22, 0.88))'
-                    : 'linear-gradient(160deg, rgba(4, 14, 30, 0.75), rgba(2, 10, 22, 0.65))',
-                borderBottom: '1px solid rgba(0, 212, 255, 0.1)',
-                boxShadow: scrolled
-                    ? '0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(0, 212, 255, 0.06)'
-                    : 'none',
-                transition: 'background 300ms ease, box-shadow 300ms ease',
-            }}
+            className={cn(
+                "w-full sticky top-0 z-30 transition-all duration-300",
+                scrolled ? "bg-background/80 backdrop-blur-md border-b border-border shadow-sm" : "bg-transparent border-b border-transparent"
+            )}
         >
-            <div className="flex items-center justify-between px-4 md:px-6 py-3">
+            <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
                 {/* Logo */}
                 <button
                     onClick={() => handleNav('Home')}
-                    className="flex items-center gap-2.5 group"
+                    className="flex items-center gap-2 group cursor-pointer"
                     aria-label="Go to Home"
                 >
-                    <div className="relative">
-                        <img
-                            src={logo}
-                            className="h-8 w-8 rounded-xl object-cover"
-                            alt="floatCHAT logo"
-                            style={{ boxShadow: '0 0 12px rgba(0,212,255,0.3), 0 2px 8px rgba(0,0,0,0.4)' }}
-                        />
-                        <span
-                            className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400"
-                            style={{ boxShadow: '0 0 6px rgba(52, 211, 153, 0.8)', border: '1.5px solid rgba(4,14,30,0.9)' }}
-                        />
-                    </div>
-                    <span
-                        className="text-xl font-semibold tracking-tight"
-                        style={{
-                            fontFamily: "'Space Grotesk', Inter, sans-serif",
-                            background: 'linear-gradient(135deg, #38e8ff 0%, #00d4ff 50%, #80d8f0 100%)',
-                            WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                            backgroundClip: 'text',
-                        }}
-                    >
-                        floatCHAT
+                    <span className={cn("text-2xl font-display tracking-tight", isDarkCanvasBg ? "text-white" : "text-foreground")}>
+                        Float<span className="text-periwinkle italic">CHAT</span>
                     </span>
                 </button>
 
                 {/* Desktop Nav */}
-                <nav className="hidden md:flex items-center gap-0.5 px-1.5 py-1 rounded-xl"
-                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
-                >
+                <nav className="hidden md:flex items-center gap-2">
                     {navItems.map((item) => {
                         const isActive = activePage === item.name;
                         return (
                             <button
                                 key={item.name}
                                 onClick={() => handleNav(item.name)}
-                                className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all duration-200"
-                                style={{
-                                    color: isActive ? '#fff' : 'rgba(232,244,253,0.55)',
-                                    background: isActive ? 'rgba(0, 212, 255, 0.1)' : 'transparent',
-                                }}
+                                className={cn(
+                                    "relative flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-sans font-medium transition-colors duration-200 cursor-pointer",
+                                    isActive 
+                                        ? (isDarkCanvasBg ? "text-white" : "text-foreground") 
+                                        : (isDarkCanvasBg ? "text-white/70 hover:text-white hover:bg-white/10" : "text-muted-foreground hover:text-foreground hover:bg-muted")
+                                )}
                                 title={item.name}
                             >
-                                <span style={{ color: isActive ? '#00d4ff' : 'inherit' }}>
+                                <span className={isActive ? "text-periwinkle" : (isDarkCanvasBg ? "text-white/70" : "text-muted-foreground")}>
                                     {item.icon}
                                 </span>
                                 <span>{item.name}</span>
@@ -103,11 +74,7 @@ function Navbar({ activePage, setActivePage }) {
                                 {isActive && (
                                     <motion.span
                                         layoutId="nav-indicator"
-                                        className="absolute inset-0 rounded-lg"
-                                        style={{
-                                            background: 'rgba(0, 212, 255, 0.08)',
-                                            border: '1px solid rgba(0, 212, 255, 0.18)',
-                                        }}
+                                        className="absolute bottom-0 left-3 right-3 h-[2px] bg-periwinkle"
                                         transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                     />
                                 )}
@@ -118,15 +85,17 @@ function Navbar({ activePage, setActivePage }) {
 
                 {/* Mobile Hamburger */}
                 <button
-                    className="md:hidden flex items-center justify-center w-9 h-9 rounded-xl transition-all"
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                    className={cn(
+                        "md:hidden flex items-center justify-center p-2 rounded-md transition-colors cursor-pointer",
+                        isDarkCanvasBg ? "text-white hover:bg-white/10" : "text-foreground hover:bg-muted"
+                    )}
                     onClick={() => setMobileOpen(!mobileOpen)}
                     aria-label="Toggle navigation"
                 >
                     <AnimatePresence mode="wait">
                         {mobileOpen
-                            ? <motion.span key="x" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.15 }}><X size={18} /></motion.span>
-                            : <motion.span key="menu" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.15 }}><Menu size={18} /></motion.span>
+                            ? <motion.span key="x" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.15 }}><X size={20} /></motion.span>
+                            : <motion.span key="menu" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.15 }}><Menu size={20} /></motion.span>
                         }
                     </AnimatePresence>
                 </button>
@@ -140,24 +109,21 @@ function Navbar({ activePage, setActivePage }) {
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-                        className="md:hidden overflow-hidden border-t"
-                        style={{ borderColor: 'rgba(0, 212, 255, 0.08)' }}
+                        className="md:hidden overflow-hidden border-t border-border bg-background"
                     >
-                        <div className="px-3 pt-2 pb-3 flex flex-col gap-0.5">
+                        <div className="px-4 py-4 flex flex-col gap-2">
                             {navItems.map((item) => {
                                 const isActive = activePage === item.name;
                                 return (
                                     <button
                                         key={item.name}
                                         onClick={() => handleNav(item.name)}
-                                        className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200"
-                                        style={{
-                                            color: isActive ? '#fff' : 'rgba(232,244,253,0.6)',
-                                            background: isActive ? 'rgba(0, 212, 255, 0.1)' : 'transparent',
-                                            borderLeft: isActive ? '2px solid #00d4ff' : '2px solid transparent',
-                                        }}
+                                        className={cn(
+                                            "flex items-center gap-3 px-3 py-3 rounded-md text-sm font-sans font-medium transition-all duration-200 cursor-pointer",
+                                            isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50"
+                                        )}
                                     >
-                                        <span style={{ color: isActive ? '#00d4ff' : 'inherit' }}>{item.icon}</span>
+                                        <span className={isActive ? "text-periwinkle" : ""}>{item.icon}</span>
                                         <span>{item.name}</span>
                                     </button>
                                 );

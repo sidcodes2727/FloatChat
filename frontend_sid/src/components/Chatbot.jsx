@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, ChevronDown, ChevronUp, Bot, MapPin, Sparkles } from "lucide-react";
+import { X, Send, Bot, Sparkles } from "lucide-react";
 import { API_BASE } from '../config';
 
 /* ─── Typing animation ─── */
@@ -10,13 +10,12 @@ function TypingDots() {
             {[0, 1, 2].map(i => (
                 <span
                     key={i}
-                    className="block rounded-full"
+                    className="block rounded-full bg-periwinkle"
                     style={{
                         width: 6,
                         height: 6,
-                        background: '#00d4ff',
                         animation: `typing-bounce 0.9s ease-in-out ${i * 0.18}s infinite`,
-                        opacity: 0.7,
+                        opacity: 0.8,
                     }}
                 />
             ))}
@@ -34,36 +33,18 @@ function MessageBubble({ message }) {
             transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
             className={`flex ${isUser ? 'justify-end' : 'justify-start'} items-end gap-2`}
         >
-            {/* Bot avatar */}
             {!isUser && (
-                <div
-                    className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mb-0.5"
-                    style={{
-                        background: 'rgba(0,212,255,0.12)',
-                        border: '1px solid rgba(0,212,255,0.2)',
-                    }}
-                >
-                    <Bot size={12} style={{ color: '#00d4ff' }} />
+                <div className="w-7 h-7 rounded bg-white/10 flex items-center justify-center shrink-0 mb-0.5 border border-white/10 shadow-sm">
+                    <Bot size={14} className="text-periwinkle" />
                 </div>
             )}
 
             <div
-                className="max-w-[82%] px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap rounded-2xl"
-                style={
+                className={`max-w-[82%] px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap rounded-2xl shadow-sm ${
                     isUser
-                        ? {
-                            background: 'linear-gradient(135deg, rgba(0,212,255,0.18), rgba(0,176,216,0.12))',
-                            border: '1px solid rgba(0,212,255,0.22)',
-                            borderBottomRightRadius: 4,
-                            color: '#e8f4fd',
-                        }
-                        : {
-                            background: 'rgba(255,255,255,0.055)',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                            borderBottomLeftRadius: 4,
-                            color: 'rgba(232,244,253,0.88)',
-                        }
-                }
+                        ? 'bg-periwinkle text-white rounded-br-sm'
+                        : 'bg-white/10 text-white border border-white/10 rounded-bl-sm font-serif backdrop-blur-md'
+                }`}
             >
                 {message.content}
             </div>
@@ -72,7 +53,7 @@ function MessageBubble({ message }) {
 }
 
 /* ─── Chatbot panel ─── */
-export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput, setChatPlotsData }) {
+export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput, setChatPlotsData, setChatPlotsOpen }) {
     const CONCISE_INSTRUCTIONS = "You are floatCHAT. Answer very concisely (1–2 sentences). Use ARGO data when provided. Include numbers with units. If uncertain, say so briefly.";
 
     const [messages, setMessages] = useState([
@@ -93,7 +74,7 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
     useEffect(() => {
         if (!listRef.current) return;
         listRef.current.scrollTop = listRef.current.scrollHeight;
-    }, [messages, chatOpen]);
+    }, [messages, chatOpen, loading]);
 
     const suggestedPrompts = [
         "What is the average ocean temperature?",
@@ -125,6 +106,7 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
             setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: reply }]);
             if (data?.plottingData && setChatPlotsData) {
                 setChatPlotsData(data.plottingData);
+                if (setChatPlotsOpen) setChatPlotsOpen(true);
             }
         } catch (e) {
             setError(e.message || 'Something went wrong');
@@ -149,74 +131,49 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 32, scale: 0.94 }}
                     transition={{ duration: 0.28, ease: [0.34, 1.56, 0.64, 1] }}
-                    className="fixed bottom-24 right-4 md:right-6 z-50 w-[calc(100vw-2rem)] md:w-[420px] h-[560px] flex flex-col overflow-hidden"
+                    className="fixed bottom-24 right-4 md:right-6 z-50 w-[calc(100vw-2rem)] md:w-[420px] h-[560px] flex flex-col overflow-hidden shadow-2xl rounded-2xl"
                     style={{
-                        background: 'linear-gradient(160deg, rgba(6, 18, 40, 0.97), rgba(3, 10, 22, 0.98))',
-                        border: '1px solid rgba(0, 212, 255, 0.18)',
-                        borderRadius: 20,
-                        boxShadow: '0 0 0 1px rgba(0,212,255,0.06), 0 24px 60px rgba(0,0,0,0.7), 0 0 40px rgba(0,212,255,0.06)',
-                        backdropFilter: 'blur(20px)',
+                        background: 'rgba(9, 21, 64, 0.88)',
+                        backdropFilter: 'blur(16px)',
+                        border: '1px solid rgba(118, 146, 255, 0.2)', // periwinkle tint
                     }}
                 >
                     {/* ── Header ── */}
-                    <div
-                        className="flex items-center justify-between px-4 py-3 shrink-0"
-                        style={{ borderBottom: '1px solid rgba(0,212,255,0.1)' }}
-                    >
+                    <div className="flex items-center justify-between px-5 py-4 shrink-0 border-b border-white/10 bg-black/20">
                         <div className="flex items-center gap-3">
-                            <div
-                                className="w-9 h-9 rounded-xl flex items-center justify-center relative"
-                                style={{
-                                    background: 'linear-gradient(135deg, rgba(0,212,255,0.15), rgba(0,150,200,0.1))',
-                                    border: '1px solid rgba(0,212,255,0.25)',
-                                    boxShadow: '0 0 16px rgba(0,212,255,0.15)',
-                                }}
-                            >
-                                <Bot size={17} style={{ color: '#00d4ff' }} />
-                                {/* Ping animation */}
-                                <span
-                                    className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400"
-                                    style={{ boxShadow: '0 0 6px rgba(52,211,153,0.8)', border: '1.5px solid rgba(3,10,22,0.9)' }}
-                                />
+                            <div className="w-10 h-10 rounded bg-white/5 border border-white/10 flex items-center justify-center relative shadow-sm">
+                                <Bot size={20} className="text-periwinkle" />
+                                <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-green-500 border-2 border-[#091540]" />
                             </div>
                             <div>
-                                <h3
-                                    className="text-sm font-bold text-white leading-none"
-                                    style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}
-                                >
+                                <h3 className="text-sm font-bold text-white leading-none font-display tracking-wide uppercase">
                                     floatCHAT
                                 </h3>
-                                <div className="flex items-center gap-1.5 mt-1">
-                                    <span className="glow-dot" style={{ width: 5, height: 5 }} />
-                                    <span className="text-[10px]" style={{ color: 'rgba(232,244,253,0.4)' }}>
+                                <div className="flex items-center gap-1.5 mt-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                    <span className="text-[10px] font-mono uppercase tracking-widest text-white/60">
                                         Online · Ocean AI
                                     </span>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                            <div
-                                className="flex items-center gap-1 px-2 py-1 rounded-full"
-                                style={{ background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.15)' }}
-                            >
-                                <Sparkles size={10} style={{ color: '#00d4ff' }} />
-                                <span className="text-[10px] font-semibold" style={{ color: '#00d4ff' }}>AI</span>
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-periwinkle/20 border border-periwinkle/30">
+                                <Sparkles size={12} className="text-periwinkle" />
+                                <span className="text-[10px] font-semibold uppercase tracking-widest text-periwinkle">AI</span>
                             </div>
                             <button
-                                className="w-7 h-7 flex items-center justify-center rounded-lg transition-all"
-                                style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(232,244,253,0.5)' }}
+                                className="text-white/50 hover:text-white hover:bg-white/10 p-1.5 rounded-md transition-colors"
                                 onClick={() => setChatOpen(false)}
                             >
-                                <X size={14} />
+                                <X size={16} />
                             </button>
                         </div>
                     </div>
 
-
-
                     {/* ── Messages ── */}
-                    <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+                    <div ref={listRef} className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
                         {messages.map((m) => (
                             <MessageBubble key={m.id} message={m} />
                         ))}
@@ -224,7 +181,7 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
                         {/* Suggested prompts */}
                         {messages.length === 1 && !loading && (
                             <motion.div
-                                className="flex flex-wrap gap-2 mt-3"
+                                className="flex flex-wrap gap-2 mt-4"
                                 initial={{ opacity: 0, y: 6 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.3 }}
@@ -233,20 +190,7 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
                                     <button
                                         key={prompt}
                                         onClick={() => sendMessage(prompt)}
-                                        className="text-[11px] px-3 py-1.5 rounded-full transition-all duration-200"
-                                        style={{
-                                            border: '1px solid rgba(0,212,255,0.18)',
-                                            color: 'rgba(0,212,255,0.8)',
-                                            background: 'rgba(0,212,255,0.06)',
-                                        }}
-                                        onMouseEnter={e => {
-                                            e.currentTarget.style.background = 'rgba(0,212,255,0.12)';
-                                            e.currentTarget.style.borderColor = 'rgba(0,212,255,0.35)';
-                                        }}
-                                        onMouseLeave={e => {
-                                            e.currentTarget.style.background = 'rgba(0,212,255,0.06)';
-                                            e.currentTarget.style.borderColor = 'rgba(0,212,255,0.18)';
-                                        }}
+                                        className="text-[11px] px-3 py-1.5 rounded border border-white/20 text-white hover:bg-white/10 font-mono tracking-tight transition-colors"
                                     >
                                         {prompt}
                                     </button>
@@ -255,10 +199,7 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
                         )}
 
                         {error && (
-                            <div
-                                className="text-xs px-3 py-2 rounded-lg"
-                                style={{ color: 'rgba(248,113,113,0.9)', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}
-                            >
+                            <div className="text-xs px-3 py-2 rounded border border-red-500/30 bg-red-500/10 text-red-200 font-mono">
                                 {error}
                             </div>
                         )}
@@ -266,46 +207,29 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
                     </div>
 
                     {/* ── Input ── */}
-                    <div
-                        className="px-3 py-3 shrink-0"
-                        style={{ borderTop: '1px solid rgba(0,212,255,0.08)' }}
-                    >
-                        <div
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl"
-                            style={{
-                                background: 'rgba(2, 10, 22, 0.7)',
-                                border: '1px solid rgba(255,255,255,0.09)',
-                                transition: 'border-color 200ms ease',
-                            }}
-                            onFocusCapture={e => e.currentTarget.style.borderColor = 'rgba(0,212,255,0.3)'}
-                            onBlurCapture={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)'}
-                        >
+                    <div className="px-4 py-4 shrink-0 border-t border-white/10 bg-black/20">
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 bg-white/5 focus-within:border-periwinkle focus-within:ring-1 focus-within:ring-periwinkle transition-all">
                             <input
                                 type="text"
                                 placeholder="Ask about oceanographic data..."
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 onKeyDown={onKeyDown}
-                                className="flex-1 text-sm bg-transparent border-none outline-none"
-                                style={{ color: 'rgba(232,244,253,0.9)' }}
+                                className="flex-1 text-sm bg-transparent border-none outline-none font-sans text-white placeholder:text-white/40 px-1"
                             />
                             <button
                                 onClick={() => sendMessage()}
                                 disabled={loading || !input.trim()}
-                                className="w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200"
-                                style={{
-                                    background: input.trim() && !loading
-                                        ? 'linear-gradient(135deg, #00d4ff, #0099cc)'
-                                        : 'rgba(255,255,255,0.06)',
-                                    color: input.trim() && !loading ? '#001a2e' : 'rgba(232,244,253,0.25)',
-                                    boxShadow: input.trim() && !loading ? '0 2px 10px rgba(0,212,255,0.3)' : 'none',
-                                    cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
-                                }}
+                                className={`w-8 h-8 flex items-center justify-center rounded transition-all duration-200 ${
+                                    input.trim() && !loading
+                                        ? 'bg-periwinkle text-white hover:bg-royal-blue shadow-sm'
+                                        : 'bg-white/10 text-white/40 cursor-not-allowed'
+                                }`}
                             >
-                                <Send size={13} />
+                                <Send size={14} className={input.trim() && !loading ? 'ml-0.5' : ''} />
                             </button>
                         </div>
-                        <p className="text-center mt-1.5 text-[10px]" style={{ color: 'rgba(232,244,253,0.25)' }}>
+                        <p className="text-center mt-3 text-[10px] font-mono tracking-widest uppercase text-white/50">
                             Powered by ARGO float data
                         </p>
                     </div>

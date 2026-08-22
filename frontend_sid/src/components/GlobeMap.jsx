@@ -44,7 +44,7 @@ export default function GlobeMap({ onMapClick }) {
               lng: Number(d.longitude),
               // Map depth to a reasonable altitude scale for the 3D bars (0 to ~0.5)
               altitude: d.depth != null ? Math.min(0.5, Number(d.depth) / 10000) : 0.05,
-              color: d.temperature != null ? getColorForTemperature(Number(d.temperature)) : '#00d4ff',
+              color: d.temperature != null ? getColorForTemperature(Number(d.temperature)) : '#7692FF',
             }));
           setData(cleaned);
         }
@@ -56,43 +56,44 @@ export default function GlobeMap({ onMapClick }) {
     fetchData();
   }, []);
 
-  // Helper to color points by temperature (blue to red)
+  // Helper to color points by temperature using exact palette
   function getColorForTemperature(temp) {
     const t = Math.max(0, Math.min(1, temp / 30));
-    const r = Math.floor(30 + 225 * t);
-    const g = Math.floor(80 + 120 * t);
-    const b = Math.floor(220 - 200 * t);
+    // Interpolate from Royal Blue [27, 44, 193] to Light Ocean Blue [171, 210, 250]
+    const r = Math.round(27 + (171 - 27) * t);
+    const g = Math.round(44 + (210 - 44) * t);
+    const b = Math.round(193 + (250 - 193) * t);
     return `rgba(${r}, ${g}, ${b}, 0.8)`;
   }
 
   const tooltipHtml = useMemo(() => {
     return (d) => `
       <div style="
-        background: rgba(4, 12, 26, 0.9);
-        border: 1px solid rgba(0, 212, 255, 0.3);
-        border-radius: 8px;
-        padding: 10px;
-        color: white;
-        font-family: sans-serif;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-        min-width: 150px;
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 12px;
+        color: var(--foreground);
+        font-family: var(--font-mono);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        min-width: 180px;
       ">
-        <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: #00d4ff;">Float Point</div>
-        <div style="font-size: 12px; color: #ccc;">
+        <div style="font-weight: 700; font-size: 10px; margin-bottom: 8px; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid var(--border); padding-bottom: 6px;">Float Point</div>
+        <div style="font-size: 11px; color: var(--foreground); line-height: 1.6;">
           <b>Lat:</b> ${d.lat.toFixed(3)}°<br/>
           <b>Lng:</b> ${d.lng.toFixed(3)}°<br/>
           ${d.depth != null ? `<b>Depth:</b> ${Number(d.depth).toFixed(1)} m<br/>` : ''}
           ${d.temperature != null ? `<b>Temp:</b> ${Number(d.temperature).toFixed(2)} °C<br/>` : ''}
           ${d.salinity != null ? `<b>Salinity:</b> ${Number(d.salinity).toFixed(2)} PSU<br/>` : ''}
           ${d.pressure != null ? `<b>Pressure:</b> ${Number(d.pressure).toFixed(2)} dbar<br/>` : ''}
-          <div style="margin-top: 8px; font-size: 10px; font-style: italic; color: #888; text-align: center;">Click point to analyze with AI</div>
+          <div style="margin-top: 12px; font-size: 9px; color: var(--color-periwinkle); text-align: center; background: rgba(118,146,255,0.1); padding: 4px; border-radius: 4px;">Click point to analyze with AI</div>
         </div>
       </div>
     `;
   }, []);
 
   return (
-    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#020a16' }}>
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#091540' }}>
       <Globe
         ref={globeRef}
         width={dimensions.width}
@@ -117,14 +118,14 @@ export default function GlobeMap({ onMapClick }) {
       />
       
       {/* HUD Info */}
-      <div className="absolute top-4 right-4 z-10 glass-subtle rounded-lg px-4 py-2 shadow-lg" style={{ background: 'rgba(2, 10, 22, 0.7)' }}>
-        <div className="text-xs text-white/80 font-medium">Points: {data.length.toLocaleString()}</div>
-        <div className="text-[10px] text-white/50 mt-1">Color: Temperature (Blue to Red)</div>
-        <div className="text-[10px] text-white/50">Height: Depth</div>
+      <div className="absolute top-4 right-4 z-10 bg-background/90 backdrop-blur-md border border-border shadow-sm rounded-md px-4 py-3 font-mono">
+        <div className="text-xs text-foreground font-bold uppercase tracking-widest mb-2 border-b border-border pb-2">Points: {data.length.toLocaleString()}</div>
+        <div className="text-[10px] text-muted-foreground mb-1">Color: Temp (Navy to Light Blue)</div>
+        <div className="text-[10px] text-muted-foreground">Height: Depth</div>
       </div>
 
       {error && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-red-900/80 text-white px-4 py-2 rounded-lg text-sm shadow-lg">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-md text-sm shadow-sm font-mono">
           Failed to load data: {error}
         </div>
       )}

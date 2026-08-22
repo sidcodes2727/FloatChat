@@ -1,12 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import * as d3 from 'd3';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Activity, Thermometer, Droplets, Layers, SlidersHorizontal, TrendingUp } from 'lucide-react';
+import { Activity, Thermometer, Droplets, Layers, SlidersHorizontal } from 'lucide-react';
 import { API_BASE } from '../config';
 
 import { LineChart, StatCard } from './ChartWidgets';
+import { cn } from '../lib/utils';
 
-/* ─── Dashboard ─── */
 function Dashboard() {
     const [allRecords, setAllRecords] = useState([]);
     const [records, setRecords] = useState([]);
@@ -78,52 +77,36 @@ function Dashboard() {
     const salData = useMemo(() => buildSeries('salinity'), [filtered]);
     const oxyData = useMemo(() => buildSeries('oxygen'), [filtered]);
 
-    useEffect(() => {
-        console.log('Series sizes -> temp:', tempData.length, 'sal:', salData.length, 'oxy:', oxyData.length);
-    }, [tempData, salData, oxyData]);
-
     return (
-        <div className="p-4 md:p-6 space-y-5 max-w-7xl mx-auto">
+        <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto bg-background text-foreground rounded-xl border border-border mt-6">
 
             {/* ── Filter Section ── */}
             <motion.div
-                className="card p-5"
+                className="card p-6 border border-border rounded-lg bg-background"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
             >
-                <div className="flex items-center gap-2 mb-4">
-                    <div
-                        className="w-7 h-7 rounded-lg flex items-center justify-center"
-                        style={{ background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.18)' }}
-                    >
-                        <SlidersHorizontal size={14} style={{ color: '#00d4ff' }} />
+                <div className="flex items-center gap-3 mb-6 border-b border-border pb-4">
+                    <div className="w-8 h-8 rounded bg-muted flex items-center justify-center text-periwinkle">
+                        <SlidersHorizontal size={16} />
                     </div>
-                    <h3
-                        className="text-sm font-semibold text-white"
-                        style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}
-                    >
-                        Filter by Location
+                    <h3 className="text-base font-medium font-display tracking-wide flex-1">
+                        Telemetry Filter Parameters
                     </h3>
-                    <div
-                        className="ml-auto text-xs px-2.5 py-1 rounded-full"
-                        style={{ background: 'rgba(0,212,255,0.08)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.15)' }}
-                    >
-                        {filtered.length} records
+                    <div className="text-[10px] px-3 py-1.5 rounded bg-muted font-mono uppercase tracking-widest text-muted-foreground border border-border">
+                        {filtered.length} active records
                     </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {[
                         { label: 'Latitude', value: lat, onChange: e => setLat(parseFloat(e.target.value)), step: '0.01', type: 'number' },
                         { label: 'Longitude', value: lon, onChange: e => setLon(parseFloat(e.target.value)), step: '0.01', type: 'number' },
-                        { label: 'Range (°)', value: rangeDeg, onChange: e => { const v = e.target.value; setRangeDeg(v === '' ? '' : parseFloat(v)); }, step: '0.1', placeholder: 'No filter', type: 'number' },
+                        { label: 'Radius (°)', value: rangeDeg, onChange: e => { const v = e.target.value; setRangeDeg(v === '' ? '' : parseFloat(v)); }, step: '0.1', placeholder: 'Global', type: 'number' },
                     ].map(f => (
                         <div key={f.label}>
-                            <label
-                                className="block text-[10px] uppercase tracking-wider font-semibold mb-1.5"
-                                style={{ color: 'rgba(232,244,253,0.4)' }}
-                            >
+                            <label className="block text-[10px] uppercase tracking-widest font-mono mb-2 text-muted-foreground font-semibold">
                                 {f.label}
                             </label>
                             <input
@@ -133,7 +116,7 @@ function Dashboard() {
                                 onChange={f.onChange}
                                 placeholder={f.placeholder}
                                 min={f.min}
-                                className="input-field"
+                                className="w-full bg-background border border-border rounded-md px-3 py-2 font-mono text-sm text-foreground focus:outline-none focus:border-periwinkle focus:ring-1 focus:ring-periwinkle transition-all"
                             />
                         </div>
                     ))}
@@ -142,7 +125,7 @@ function Dashboard() {
 
             {/* ── Stat Cards ── */}
             <motion.div
-                className="grid grid-cols-2 lg:grid-cols-4 gap-3"
+                className="grid grid-cols-2 lg:grid-cols-4 gap-4"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1, duration: 0.4 }}
@@ -150,38 +133,35 @@ function Dashboard() {
                 <StatCard
                     label="Total Records"
                     value={loading ? '—' : total.toLocaleString()}
-                    icon={<Activity size={14} />}
-                    color="#00d4ff"
+                    icon={<Activity size={16} />}
+                    color="var(--color-periwinkle)"
                 />
                 <StatCard
                     label="Avg Temperature"
                     value={loading ? '—' : avgTemp.toFixed(2)}
                     unit="°C"
-                    icon={<Thermometer size={14} />}
-                    color="#f97316"
+                    icon={<Thermometer size={16} />}
+                    color="var(--color-light-ocean)"
                 />
                 <StatCard
                     label="Avg Salinity"
                     value={loading ? '—' : avgSal.toFixed(2)}
                     unit="PSU"
-                    icon={<Droplets size={14} />}
-                    color="#7c3aed"
+                    icon={<Droplets size={16} />}
+                    color="var(--color-royal-blue)"
                 />
                 <StatCard
                     label="Max Depth"
                     value={loading ? '—' : maxDepth.toFixed(0)}
                     unit="m"
-                    icon={<Layers size={14} />}
-                    color="#22c55e"
+                    icon={<Layers size={16} />}
+                    color="var(--color-deep-navy)"
                 />
             </motion.div>
 
             {error && (
-                <div
-                    className="px-4 py-3 rounded-xl text-sm"
-                    style={{ color: 'rgba(248,113,113,0.9)', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}
-                >
-                    Error: {error}
+                <div className="px-4 py-3 rounded-md text-sm font-mono border border-red-200 bg-red-50 text-red-600">
+                    ERROR: {error}
                 </div>
             )}
 
@@ -193,12 +173,12 @@ function Dashboard() {
                     animate={{ opacity: 1 }}
                 >
                     {[...Array(3)].map((_, i) => (
-                        <div key={i} className="card p-5">
+                        <div key={i} className="card p-5 border border-border bg-background">
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="skeleton w-7 h-7 rounded-lg" />
-                                <div className="skeleton h-3 w-32 rounded" />
+                                <div className="w-8 h-8 rounded bg-muted animate-pulse" />
+                                <div className="h-4 w-32 rounded bg-muted animate-pulse" />
                             </div>
-                            <div className="skeleton w-full rounded" style={{ height: 220 }} />
+                            <div className="w-full rounded bg-muted animate-pulse" style={{ height: 220 }} />
                         </div>
                     ))}
                 </motion.div>
@@ -216,15 +196,15 @@ function Dashboard() {
                         <LineChart
                             title="Temperature vs Depth"
                             data={tempData}
-                            color="#f97316"
+                            color="var(--color-periwinkle)"
                             xLabel="Depth (m)"
                             yLabel="Temperature (°C)"
-                            icon={<Thermometer size={14} />}
+                            icon={<Thermometer size={16} />}
                         />
                     ) : (
-                        <div className="card p-5 flex flex-col items-center justify-center min-h-[200px] gap-3">
-                            <Thermometer size={24} style={{ color: 'rgba(232,244,253,0.2)' }} />
-                            <p className="text-sm" style={{ color: 'rgba(232,244,253,0.3)' }}>No temperature data</p>
+                        <div className="card p-5 flex flex-col items-center justify-center min-h-[200px] gap-3 bg-background border border-border">
+                            <Thermometer size={24} className="text-muted" />
+                            <p className="text-xs font-mono text-muted-foreground tracking-widest">NO_DATA_FOUND</p>
                         </div>
                     )}
 
@@ -232,15 +212,15 @@ function Dashboard() {
                         <LineChart
                             title="Salinity vs Depth"
                             data={salData}
-                            color="#7c3aed"
+                            color="var(--color-royal-blue)"
                             xLabel="Depth (m)"
                             yLabel="Salinity (PSU)"
-                            icon={<Droplets size={14} />}
+                            icon={<Droplets size={16} />}
                         />
                     ) : (
-                        <div className="card p-5 flex flex-col items-center justify-center min-h-[200px] gap-3">
-                            <Droplets size={24} style={{ color: 'rgba(232,244,253,0.2)' }} />
-                            <p className="text-sm" style={{ color: 'rgba(232,244,253,0.3)' }}>No salinity data</p>
+                        <div className="card p-5 flex flex-col items-center justify-center min-h-[200px] gap-3 bg-background border border-border">
+                            <Droplets size={24} className="text-muted" />
+                            <p className="text-xs font-mono text-muted-foreground tracking-widest">NO_DATA_FOUND</p>
                         </div>
                     )}
 
@@ -248,15 +228,15 @@ function Dashboard() {
                         <LineChart
                             title="Oxygen vs Depth"
                             data={oxyData}
-                            color="#22c55e"
+                            color="var(--color-deep-navy)"
                             xLabel="Depth (m)"
                             yLabel="Oxygen"
-                            icon={<Activity size={14} />}
+                            icon={<Activity size={16} />}
                         />
                     ) : (
-                        <div className="card p-5 flex flex-col items-center justify-center min-h-[200px] gap-3">
-                            <Activity size={24} style={{ color: 'rgba(232,244,253,0.2)' }} />
-                            <p className="text-sm" style={{ color: 'rgba(232,244,253,0.3)' }}>No oxygen data</p>
+                        <div className="card p-5 flex flex-col items-center justify-center min-h-[200px] gap-3 bg-background border border-border">
+                            <Activity size={24} className="text-muted" />
+                            <p className="text-xs font-mono text-muted-foreground tracking-widest">NO_DATA_FOUND</p>
                         </div>
                     )}
                 </motion.div>

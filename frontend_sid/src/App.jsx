@@ -8,12 +8,13 @@ import Home from './components/Home';
 import OceanMap from './components/OceanMap';
 import MetricMap from './components/MetricMap';
 import GlobeMap from './components/GlobeMap';
-import { Bot, X } from 'lucide-react';
+import { Bot, X, BarChart3 } from 'lucide-react';
 
 function OceanVizApp() {
     const [chatOpen, setChatOpen] = useState(false);
     const [activePage, setActivePage] = useState('Home');
     const [chatPlotsData, setChatPlotsData] = useState(null);
+    const [chatPlotsOpen, setChatPlotsOpen] = useState(false);
     const [chatInput, setChatInput] = useState('');
     const mainScrollRef = useRef(null);
 
@@ -25,8 +26,10 @@ function OceanVizApp() {
     };
 
     return (
-        <div className="h-screen flex flex-col text-white w-full overflow-hidden" style={{ background: 'transparent' }}>
-            <Navbar activePage={activePage} setActivePage={setActivePage} />
+        <div className={`h-screen flex flex-col w-full overflow-hidden text-foreground ${activePage === 'Home' ? '' : 'bg-background'}`}>
+            <div className="relative z-30">
+                <Navbar activePage={activePage} setActivePage={setActivePage} />
+            </div>
 
             <AnimatePresence mode="wait">
                 <motion.div
@@ -39,14 +42,7 @@ function OceanVizApp() {
                     className={isFullScreenMap ? 'flex-1 relative overflow-hidden' : 'flex-1 relative overflow-y-auto overflow-x-hidden'}
                 >
                     {activePage === 'Depth Profiles' && (
-                        <div
-                            className="rounded-xl mx-3 md:mx-5 my-3"
-                            style={{
-                                background: 'rgba(4, 12, 26, 0.4)',
-                                border: '1px solid rgba(0, 212, 255, 0.07)',
-                                backdropFilter: 'blur(8px)',
-                            }}
-                        >
+                        <div className="mx-4 md:mx-auto my-4 max-w-7xl">
                             <Dashboard />
                         </div>
                     )}
@@ -59,25 +55,35 @@ function OceanVizApp() {
                 </motion.div>
             </AnimatePresence>
 
-            <ChatPlots data={chatPlotsData} onClose={() => setChatPlotsData(null)} />
+            <ChatPlots data={chatPlotsData} isOpen={chatPlotsOpen} onClose={() => setChatPlotsOpen(false)} />
+
+            {/* ── Data Analysis FAB ── */}
+            <AnimatePresence>
+                {chatPlotsData && !chatPlotsOpen && (
+                    <motion.button
+                        initial={{ opacity: 0, x: -20, scale: 0.9 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: -20, scale: 0.9 }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setChatPlotsOpen(true)}
+                        className="fixed bottom-6 left-5 md:left-6 z-40 flex items-center gap-2 px-4 py-2.5 rounded-full font-mono tracking-widest text-xs uppercase shadow-md transition-all cursor-pointer bg-foreground text-background border border-foreground/10 hover:shadow-lg"
+                    >
+                        <BarChart3 size={16} />
+                        Data Analysis
+                    </motion.button>
+                )}
+            </AnimatePresence>
 
             {/* ── Chatbot FAB ── */}
             <motion.button
                 onClick={() => setChatOpen(!chatOpen)}
-                className="fixed bottom-5 right-5 z-50 w-13 h-13 rounded-2xl flex items-center justify-center"
+                className="fixed bottom-6 right-5 md:right-6 z-50 rounded-full flex items-center justify-center cursor-pointer border border-border shadow-md transition-all hover:shadow-lg"
                 style={{
-                    width: 50,
-                    height: 50,
-                    background: chatOpen
-                        ? 'rgba(6, 18, 40, 0.92)'
-                        : 'linear-gradient(135deg, #00d4ff 0%, #0099cc 100%)',
-                    border: chatOpen
-                        ? '1px solid rgba(0, 212, 255, 0.25)'
-                        : '1px solid rgba(0, 212, 255, 0.0)',
-                    boxShadow: chatOpen
-                        ? '0 4px 20px rgba(0,0,0,0.4)'
-                        : '0 4px 20px rgba(0, 212, 255, 0.35), 0 2px 8px rgba(0,0,0,0.3)',
-                    backdropFilter: chatOpen ? 'blur(16px)' : 'none',
+                    width: 52,
+                    height: 52,
+                    background: chatOpen ? 'var(--muted)' : 'var(--background)',
+                    color: 'var(--foreground)',
                 }}
                 whileHover={{ scale: 1.08 }}
                 whileTap={{ scale: 0.92 }}
@@ -87,11 +93,8 @@ function OceanVizApp() {
                 {/* Pulse ring when closed */}
                 {!chatOpen && (
                     <span
-                        className="absolute inset-0 rounded-2xl"
-                        style={{
-                            border: '1px solid rgba(0, 212, 255, 0.5)',
-                            animation: 'ping-ring 2s ease-out infinite',
-                        }}
+                        className="absolute inset-0 rounded-full border border-border/50"
+                        style={{ animation: 'ping-ring 2s ease-out infinite' }}
                     />
                 )}
 
@@ -104,7 +107,7 @@ function OceanVizApp() {
                             exit={{ rotate: 90, opacity: 0, scale: 0.7 }}
                             transition={{ duration: 0.18 }}
                         >
-                            <X size={18} style={{ color: 'rgba(0, 212, 255, 0.85)' }} />
+                            <X size={18} style={{ color: 'var(--color-light-blue)' }} />
                         </motion.div>
                     ) : (
                         <motion.div
@@ -114,7 +117,7 @@ function OceanVizApp() {
                             exit={{ rotate: -90, opacity: 0, scale: 0.7 }}
                             transition={{ duration: 0.18 }}
                         >
-                            <Bot size={20} style={{ color: '#001a2e' }} />
+                            <Bot size={20} style={{ color: 'var(--color-royal-blue)' }} />
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -125,7 +128,8 @@ function OceanVizApp() {
                setChatOpen={setChatOpen} 
                chatInput={chatInput} 
                setChatInput={setChatInput}
-               setChatPlotsData={setChatPlotsData} 
+               setChatPlotsData={setChatPlotsData}
+               setChatPlotsOpen={setChatPlotsOpen}
             />
         </div>
     );

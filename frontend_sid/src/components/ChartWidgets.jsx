@@ -2,9 +2,10 @@ import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import { motion } from 'framer-motion';
 import { TrendingUp } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 /* ─── Chart component ─── */
-export function LineChart({ data, title, color, accentColor, xLabel = 'Depth', yLabel = 'Value', icon }) {
+export function LineChart({ data, title, color, xLabel = 'Depth', yLabel = 'Value', icon }) {
     const containerRef = useRef();
     const svgRef = useRef();
 
@@ -49,24 +50,24 @@ export function LineChart({ data, title, color, accentColor, xLabel = 'Depth', y
             .attr('transform', `translate(${margin.left},0)`)
             .call(d3.axisLeft(y).tickSize(-(width - margin.left - margin.right)).tickFormat(''))
             .selectAll('line')
-            .attr('stroke', 'rgba(255,255,255,0.04)');
+            .attr('stroke', 'var(--border)');
         svg.selectAll('.domain').remove();
 
         // X axis
         const xAxis = svg.append('g')
             .attr('transform', `translate(0,${height - margin.bottom})`)
             .call(d3.axisBottom(x).ticks(5));
-        xAxis.selectAll('text').attr('fill', 'rgba(232,244,253,0.35)').style('font-size', '9px').style('font-family', 'Inter, sans-serif');
-        xAxis.selectAll('line').attr('stroke', 'rgba(255,255,255,0.06)');
-        xAxis.selectAll('path').attr('stroke', 'rgba(255,255,255,0.06)');
+        xAxis.selectAll('text').attr('fill', 'var(--muted-foreground)').style('font-size', '10px').style('font-family', "var(--font-mono)");
+        xAxis.selectAll('line').attr('stroke', 'var(--border)');
+        xAxis.selectAll('path').attr('stroke', 'var(--border)');
 
         // Y axis
         const yAxis = svg.append('g')
             .attr('transform', `translate(${margin.left},0)`)
             .call(d3.axisLeft(y).ticks(5));
-        yAxis.selectAll('text').attr('fill', 'rgba(232,244,253,0.35)').style('font-size', '9px').style('font-family', 'Inter, sans-serif');
-        yAxis.selectAll('line').attr('stroke', 'rgba(255,255,255,0.06)');
-        yAxis.selectAll('path').attr('stroke', 'rgba(255,255,255,0.06)');
+        yAxis.selectAll('text').attr('fill', 'var(--muted-foreground)').style('font-size', '10px').style('font-family', "var(--font-mono)");
+        yAxis.selectAll('line').attr('stroke', 'var(--border)');
+        yAxis.selectAll('path').attr('stroke', 'var(--border)');
 
         // Gradient area fill
         const gradId = `area-${title.replace(/\s+/g, '')}`;
@@ -74,7 +75,7 @@ export function LineChart({ data, title, color, accentColor, xLabel = 'Depth', y
             .attr('id', gradId)
             .attr('x1', '0').attr('y1', '0')
             .attr('x2', '0').attr('y2', '1');
-        grad.append('stop').attr('offset', '0%').attr('stop-color', color).attr('stop-opacity', 0.18);
+        grad.append('stop').attr('offset', '0%').attr('stop-color', color).attr('stop-opacity', 0.1);
         grad.append('stop').attr('offset', '100%').attr('stop-color', color).attr('stop-opacity', 0);
 
         const area = d3.area()
@@ -103,26 +104,26 @@ export function LineChart({ data, title, color, accentColor, xLabel = 'Depth', y
         focus.append('circle')
             .attr('r', 4.5)
             .attr('fill', color)
-            .attr('stroke', '#040d18')
+            .attr('stroke', 'var(--background)')
             .attr('stroke-width', 2.5);
 
         // Tooltip group
         const tooltip = focus.append('g');
         tooltip.append('rect')
-            .attr('rx', 6).attr('ry', 6)
-            .attr('fill', 'rgba(4, 14, 30, 0.92)')
-            .attr('stroke', color)
-            .attr('stroke-opacity', 0.3)
+            .attr('rx', 4).attr('ry', 4)
+            .attr('fill', 'var(--background)')
+            .attr('stroke', 'var(--border)')
             .attr('stroke-width', 1)
             .attr('x', -4).attr('y', -32)
-            .attr('width', 90).attr('height', 24);
+            .attr('width', 90).attr('height', 24)
+            .style('filter', 'drop-shadow(0 4px 6px rgba(0,0,0,0.05))');
 
         tooltip.append('text')
             .attr('x', 41).attr('y', -14)
             .attr('text-anchor', 'middle')
-            .attr('fill', 'rgba(232,244,253,0.9)')
+            .attr('fill', 'var(--foreground)')
             .style('font-size', '10px')
-            .style('font-family', 'Inter, sans-serif')
+            .style('font-family', "var(--font-mono)")
             .attr('class', 'tooltip-text');
 
         const bisect = d3.bisector(d => d.x).center;
@@ -156,44 +157,35 @@ export function LineChart({ data, title, color, accentColor, xLabel = 'Depth', y
         svg.append('text')
             .attr('x', (width) / 2).attr('y', height - 4)
             .attr('text-anchor', 'middle')
-            .attr('fill', 'rgba(232,244,253,0.3)')
-            .style('font-size', '9px').style('font-family', 'Inter, sans-serif')
+            .attr('fill', 'var(--muted-foreground)')
+            .style('font-size', '10px').style('font-family', "var(--font-sans)")
             .text(xLabel);
 
         svg.append('text')
             .attr('transform', 'rotate(-90)')
             .attr('x', -(height / 2)).attr('y', 12)
             .attr('text-anchor', 'middle')
-            .attr('fill', 'rgba(232,244,253,0.3)')
-            .style('font-size', '9px').style('font-family', 'Inter, sans-serif')
+            .attr('fill', 'var(--muted-foreground)')
+            .style('font-size', '10px').style('font-family', "var(--font-sans)")
             .text(yLabel);
 
     }, [data, title, color, xLabel, yLabel]);
 
     return (
-        <div ref={containerRef} className="card overflow-hidden w-full">
+        <div ref={containerRef} className="card overflow-hidden w-full bg-background border-border">
             {/* Card header */}
-            <div
-                className="flex items-center gap-3 px-5 py-3.5"
-                style={{ borderBottom: '1px solid rgba(0,212,255,0.07)' }}
-            >
-                <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ background: `${color}15`, border: `1px solid ${color}22` }}
-                >
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
+                <div className="w-8 h-8 rounded bg-muted flex items-center justify-center shrink-0">
                     <span style={{ color }}>{icon}</span>
                 </div>
-                <h3
-                    className="text-sm font-semibold text-white whitespace-nowrap overflow-hidden text-ellipsis"
-                    style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}
-                >
+                <h3 className="text-base font-medium text-foreground whitespace-nowrap overflow-hidden text-ellipsis flex-1 font-display">
                     {title}
                 </h3>
                 <div className="ml-auto shrink-0">
-                    <TrendingUp size={13} style={{ color: `${color}70` }} />
+                    <TrendingUp size={14} className="text-muted-foreground" />
                 </div>
             </div>
-            <div className="px-2 pt-2 pb-1 overflow-x-auto w-full">
+            <div className="px-2 pt-4 pb-2 overflow-x-auto w-full">
                 <svg ref={svgRef} className="w-full min-w-full" />
             </div>
         </div>
@@ -201,30 +193,24 @@ export function LineChart({ data, title, color, accentColor, xLabel = 'Depth', y
 }
 
 /* ─── Stat card ─── */
-export function StatCard({ label, value, unit, icon, color = '#00d4ff' }) {
+export function StatCard({ label, value, unit, icon, color = 'var(--color-periwinkle)' }) {
     return (
         <motion.div
-            className="stat-card w-full"
-            whileHover={{ scale: 1.02, y: -2 }}
+            className="card p-5 w-full bg-background border-border flex flex-col justify-between"
+            whileHover={{ y: -2 }}
             transition={{ type: 'spring', stiffness: 400, damping: 25 }}
         >
             <div className="flex items-start justify-between mb-4">
-                <p className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'rgba(232,244,253,0.4)' }}>
+                <p className="text-[10px] uppercase tracking-widest font-semibold font-mono text-muted-foreground">
                     {label}
                 </p>
-                <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ background: `${color}15`, border: `1px solid ${color}22` }}
-                >
+                <div className="w-8 h-8 rounded bg-muted flex items-center justify-center shrink-0">
                     <span style={{ color }}>{icon}</span>
                 </div>
             </div>
-            <p
-                className="text-xl md:text-2xl font-bold text-white break-all"
-                style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}
-            >
+            <p className="text-3xl font-bold text-foreground break-all font-display tracking-tight">
                 {value}
-                {unit && <span className="text-xs md:text-sm ml-1.5 font-normal" style={{ color: 'rgba(232,244,253,0.35)' }}>{unit}</span>}
+                {unit && <span className="text-sm ml-1 text-muted-foreground font-sans font-normal">{unit}</span>}
             </p>
         </motion.div>
     );
@@ -238,7 +224,6 @@ export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel
     useEffect(() => {
         if (!datasets || datasets.length === 0) return;
 
-        // Flatten data to find extents
         const allData = datasets.flatMap(d => d.data);
         if (allData.length === 0) return;
 
@@ -275,41 +260,36 @@ export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel
             .y(d => y(d.y))
             .curve(d3.curveMonotoneX);
 
-        // Subtle gridlines
         svg.append('g')
             .attr('transform', `translate(${margin.left},0)`)
             .call(d3.axisLeft(y).tickSize(-(width - margin.left - margin.right)).tickFormat(''))
             .selectAll('line')
-            .attr('stroke', 'rgba(255,255,255,0.04)');
+            .attr('stroke', 'var(--border)');
         svg.selectAll('.domain').remove();
 
-        // X axis
         const xAxis = svg.append('g')
             .attr('transform', `translate(0,${height - margin.bottom})`)
             .call(d3.axisBottom(x).ticks(5));
-        xAxis.selectAll('text').attr('fill', 'rgba(232,244,253,0.35)').style('font-size', '9px').style('font-family', 'Inter, sans-serif');
-        xAxis.selectAll('line').attr('stroke', 'rgba(255,255,255,0.06)');
-        xAxis.selectAll('path').attr('stroke', 'rgba(255,255,255,0.06)');
+        xAxis.selectAll('text').attr('fill', 'var(--muted-foreground)').style('font-size', '10px').style('font-family', "var(--font-mono)");
+        xAxis.selectAll('line').attr('stroke', 'var(--border)');
+        xAxis.selectAll('path').attr('stroke', 'var(--border)');
 
-        // Y axis
         const yAxis = svg.append('g')
             .attr('transform', `translate(${margin.left},0)`)
             .call(d3.axisLeft(y).ticks(5));
-        yAxis.selectAll('text').attr('fill', 'rgba(232,244,253,0.35)').style('font-size', '9px').style('font-family', 'Inter, sans-serif');
-        yAxis.selectAll('line').attr('stroke', 'rgba(255,255,255,0.06)');
-        yAxis.selectAll('path').attr('stroke', 'rgba(255,255,255,0.06)');
+        yAxis.selectAll('text').attr('fill', 'var(--muted-foreground)').style('font-size', '10px').style('font-family', "var(--font-mono)");
+        yAxis.selectAll('line').attr('stroke', 'var(--border)');
+        yAxis.selectAll('path').attr('stroke', 'var(--border)');
 
-        // Lines and Areas
         datasets.forEach((ds, i) => {
             if (!ds.data || ds.data.length === 0) return;
             
-            // Area
             const gradId = `area-${title.replace(/[^a-zA-Z]/g, '')}-${i}`;
             const grad = svg.append('defs').append('linearGradient')
                 .attr('id', gradId)
                 .attr('x1', '0').attr('y1', '0')
                 .attr('x2', '0').attr('y2', '1');
-            grad.append('stop').attr('offset', '0%').attr('stop-color', ds.color).attr('stop-opacity', 0.15);
+            grad.append('stop').attr('offset', '0%').attr('stop-color', ds.color).attr('stop-opacity', 0.1);
             grad.append('stop').attr('offset', '100%').attr('stop-color', ds.color).attr('stop-opacity', 0);
 
             const area = d3.area()
@@ -323,7 +303,6 @@ export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel
                 .attr('fill', `url(#${gradId})`)
                 .attr('d', area);
 
-            // Line
             svg.append('path')
                 .datum(ds.data)
                 .attr('fill', 'none')
@@ -334,35 +313,34 @@ export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel
                 .attr('d', line);
         });
 
-        // Hover interaction
         const focusGroup = svg.append('g').style('display', 'none');
         
         const focusCircles = datasets.map(ds => {
              return focusGroup.append('circle')
                 .attr('r', 4.5)
                 .attr('fill', ds.color)
-                .attr('stroke', '#040d18')
+                .attr('stroke', 'var(--background)')
                 .attr('stroke-width', 2.5);
         });
 
-        // Tooltip group
         const tooltip = focusGroup.append('g');
-        const tooltipHeight = 16 + (datasets.length * 12);
+        const tooltipHeight = 16 + (datasets.length * 16);
         
         const tooltipBg = tooltip.append('rect')
-            .attr('rx', 6).attr('ry', 6)
-            .attr('fill', 'rgba(4, 14, 30, 0.92)')
-            .attr('stroke', 'rgba(255,255,255,0.1)')
+            .attr('rx', 4).attr('ry', 4)
+            .attr('fill', 'var(--background)')
+            .attr('stroke', 'var(--border)')
             .attr('stroke-width', 1)
-            .attr('width', 130).attr('height', tooltipHeight);
+            .attr('width', 130).attr('height', tooltipHeight)
+            .style('filter', 'drop-shadow(0 4px 6px rgba(0,0,0,0.05))');
 
         const tooltipTexts = datasets.map((ds, i) => {
              return tooltip.append('text')
-                .attr('x', 65).attr('y', 20 + (i * 12))
+                .attr('x', 65).attr('y', 20 + (i * 16))
                 .attr('text-anchor', 'middle')
                 .attr('fill', ds.color)
-                .style('font-size', '9px')
-                .style('font-family', 'Inter, sans-serif');
+                .style('font-size', '10px')
+                .style('font-family', "var(--font-mono)");
         });
 
         const bisect = d3.bisector(d => d.x).center;
@@ -371,17 +349,14 @@ export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel
             const [mx] = d3.pointer(event);
             const dx = x.invert(mx);
             
-            // Find points for all datasets
             const points = datasets.map(ds => {
                 if (!ds.data || !ds.data.length) return null;
                 const i = bisect(ds.data, dx);
                 return ds.data[Math.max(0, Math.min(ds.data.length - 1, i))];
             });
 
-            // Anchor the tooltip to the mouse x
             const px = mx;
             
-            // Position circles
             points.forEach((pt, i) => {
                 if (pt) {
                     focusCircles[i].attr('transform', `translate(${x(pt.x)},${y(pt.y)})`).style('display', null);
@@ -394,11 +369,10 @@ export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel
 
             focusGroup.attr('transform', `translate(0, 0)`); 
             
-            // Smart tooltip positioning
             const tooltipX = px > width - 140 ? px - 134 : px + 8;
             tooltipBg.attr('x', tooltipX).attr('y', margin.top);
             tooltipTexts.forEach((text, i) => {
-                text.attr('x', tooltipX + 65).attr('y', margin.top + 16 + (i * 12));
+                text.attr('x', tooltipX + 65).attr('y', margin.top + 16 + (i * 16));
             });
         }
 
@@ -412,56 +386,44 @@ export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel
             .on('mousemove', moved)
             .on('mouseleave', () => focusGroup.style('display', 'none'));
 
-        // Axis labels
         svg.append('text')
             .attr('x', (width) / 2).attr('y', height - 4)
             .attr('text-anchor', 'middle')
-            .attr('fill', 'rgba(232,244,253,0.3)')
-            .style('font-size', '9px').style('font-family', 'Inter, sans-serif')
+            .attr('fill', 'var(--muted-foreground)')
+            .style('font-size', '10px').style('font-family', "var(--font-sans)")
             .text(xLabel);
 
         svg.append('text')
             .attr('transform', 'rotate(-90)')
             .attr('x', -(height / 2)).attr('y', 12)
             .attr('text-anchor', 'middle')
-            .attr('fill', 'rgba(232,244,253,0.3)')
-            .style('font-size', '9px').style('font-family', 'Inter, sans-serif')
+            .attr('fill', 'var(--muted-foreground)')
+            .style('font-size', '10px').style('font-family', "var(--font-sans)")
             .text(yLabel);
 
     }, [datasets, title, xLabel, yLabel]);
 
     return (
-        <div ref={containerRef} className="card overflow-hidden w-full">
-            {/* Card header */}
-            <div
-                className="flex items-center gap-3 px-5 py-3.5"
-                style={{ borderBottom: '1px solid rgba(0,212,255,0.07)' }}
-            >
-                <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ background: `rgba(255,255,255,0.05)`, border: `1px solid rgba(255,255,255,0.1)` }}
-                >
-                    <span style={{ color: '#fff' }}>{icon}</span>
+        <div ref={containerRef} className="card overflow-hidden w-full bg-background border-border">
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
+                <div className="w-8 h-8 rounded bg-muted flex items-center justify-center shrink-0">
+                    <span className="text-foreground">{icon}</span>
                 </div>
-                <h3
-                    className="text-sm font-semibold text-white whitespace-nowrap overflow-hidden text-ellipsis flex-1"
-                    style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}
-                >
+                <h3 className="text-base font-medium text-foreground whitespace-nowrap overflow-hidden text-ellipsis flex-1 font-display">
                     {title}
                 </h3>
             </div>
             
-            {/* Legend */}
-            <div className="flex flex-wrap gap-3 px-5 pt-3">
+            <div className="flex flex-wrap gap-4 px-5 pt-4">
                {datasets.map((ds, i) => (
-                  <div key={i} className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: ds.color }} />
-                      <span className="text-[10px] text-white/70">{ds.name}</span>
+                  <div key={i} className="flex items-center gap-2 font-mono">
+                      <div className="w-3 h-3 rounded-sm" style={{ background: ds.color }} />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{ds.name}</span>
                   </div>
                ))}
             </div>
 
-            <div className="px-2 pt-2 pb-1 overflow-x-auto w-full">
+            <div className="px-2 pt-4 pb-2 overflow-x-auto w-full">
                 <svg ref={svgRef} className="w-full min-w-full" />
             </div>
         </div>
