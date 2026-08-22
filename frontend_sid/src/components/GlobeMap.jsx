@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import Globe from 'react-globe.gl';
 import { API_BASE } from '../config';
 
-export default function GlobeMap() {
+export default function GlobeMap({ onMapClick }) {
   const [data, setData] = useState([]);
   const [error, setError] = useState(null);
   const [dimensions, setDimensions] = useState({
@@ -85,6 +85,7 @@ export default function GlobeMap() {
           ${d.temperature != null ? `<b>Temp:</b> ${Number(d.temperature).toFixed(2)} °C<br/>` : ''}
           ${d.salinity != null ? `<b>Salinity:</b> ${Number(d.salinity).toFixed(2)} PSU<br/>` : ''}
           ${d.pressure != null ? `<b>Pressure:</b> ${Number(d.pressure).toFixed(2)} dbar<br/>` : ''}
+          <div style="margin-top: 8px; font-size: 10px; font-style: italic; color: #888; text-align: center;">Click point to analyze with AI</div>
         </div>
       </div>
     `;
@@ -108,6 +109,11 @@ export default function GlobeMap() {
         pointsMerge={false}
         pointResolution={12}
         pointLabel={tooltipHtml}
+        onPointClick={(point) => {
+          if (point && onMapClick) {
+            onMapClick(point.lat, point.lng);
+          }
+        }}
       />
       
       {/* HUD Info */}

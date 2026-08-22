@@ -34,7 +34,8 @@
     "react-map-gl": "^8.0.4",
     "react-redux": "^9.2.0",
     "react-router-dom": "^7.7.1",
-    "react-toastify": "^11.0.5"
+    "react-toastify": "^11.0.5",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",

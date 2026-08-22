@@ -67,7 +67,7 @@ function toRgb(c) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-export default function MetricMap({ metric = 'salinity' }) {
+export default function MetricMap({ metric = 'salinity', onMapClick }) {
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
   const [rows, setRows] = useState([]);
   const [error, setError] = useState(null);
@@ -204,7 +204,12 @@ export default function MetricMap({ metric = 'salinity' }) {
       }
       setHoverInfo({ x: info.x, y: info.y, coordinate: info.coordinate, object: info.object });
     },
-  }), [rows, metric]);
+    onClick: (info) => {
+      if (info && info.coordinate && onMapClick) {
+         onMapClick(info.coordinate[1], info.coordinate[0]);
+      }
+    },
+  }), [rows, metric, onMapClick]);
 
   // Land mask layer (overdraw on top to hide heat on land)
   const landMask = useMemo(() => {
@@ -237,6 +242,22 @@ export default function MetricMap({ metric = 'salinity' }) {
     return { ...spec, gradient, mid };
   }, [metric]);
 
+  const renderMiniChart = (label, val, max, color) => {
+      if (val == null) return null;
+      const pct = Math.min(100, Math.max(0, (val / max) * 100));
+      return (
+         <div className="mt-1.5">
+            <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+               <span>{label}</span>
+               <span className="font-mono">{Number(val).toFixed(1)}</span>
+            </div>
+            <div className="w-full bg-black/40 h-1.5 rounded-full overflow-hidden">
+               <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+            </div>
+         </div>
+      );
+  };
+
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
       <DeckGL
@@ -268,24 +289,21 @@ export default function MetricMap({ metric = 'salinity' }) {
           style={{
             position: 'absolute',
             left: Math.min(Math.max(8, hoverInfo.x + 12), window.innerWidth - 240),
-            top: Math.min(Math.max(8, hoverInfo.y + 12), window.innerHeight - 110),
+            top: Math.min(Math.max(8, hoverInfo.y + 12), window.innerHeight - 150),
           }}
-          className="tooltip-card"
+          className="tooltip-card min-w-[160px]"
         >
-          <div className="text-white/50 text-[11px] mb-1">
-            {hoverInfo.coordinate[1].toFixed(3)}°, {hoverInfo.coordinate[0].toFixed(3)}°
+          <div className="text-white/90 text-xs font-bold mb-2 border-b border-white/10 pb-1 flex justify-between">
+            <span>Float Point</span>
+            <span className="text-white/40">{hoverInfo.coordinate[1].toFixed(2)}°, {hoverInfo.coordinate[0].toFixed(2)}°</span>
           </div>
           {hoverInfo.object ? (
-            <div className="text-white/80 text-xs">
-              {metric === 'temperature' && (
-                <div>Temperature: <span className="text-[var(--accent)] font-semibold">{(Number.isFinite(Number(hoverInfo.object.temperature)) ? Number(hoverInfo.object.temperature) : 0).toFixed(2)}</span> °C</div>
-              )}
-              {metric === 'salinity' && (
-                <div>Salinity: <span className="text-[var(--accent)] font-semibold">{(Number.isFinite(Number(hoverInfo.object.salinity)) ? Number(hoverInfo.object.salinity) : 0).toFixed(2)}</span> PSU</div>
-              )}
-              {metric === 'pressure' && (
-                <div>Pressure: <span className="text-[var(--accent)] font-semibold">{(Number.isFinite(Number(hoverInfo.object.pressure)) ? Number(hoverInfo.object.pressure) : 0).toFixed(2)}</span> dbar</div>
-              )}
+            <div>
+               {renderMiniChart('Depth (m)', hoverInfo.object.depth, 2000, '#00d4ff')}
+               {metric === 'temperature' && renderMiniChart('Temp (°C)', hoverInfo.object.temperature, 35, '#ff8a65')}
+               {metric === 'salinity' && renderMiniChart('Salinity (PSU)', hoverInfo.object.salinity, 40, '#aed581')}
+               {metric === 'pressure' && renderMiniChart('Pressure (dbar)', hoverInfo.object.pressure, 2000, '#ba68c8')}
+               <div className="text-[9px] text-white/40 mt-3 text-center italic">Click to analyze with AI</div>
             </div>
           ) : (
             <div className="text-white/40 text-xs">No point under cursor</div>

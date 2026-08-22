@@ -11,102 +11,187 @@ app.get("/", (req, res) => {
   res.send("🌊 ARGO Backend API is running!");
 });
 
-// Helper: normalize metrics to numbers with nulls -> 0
+// Helper: normalize metrics to numbers with nulls instead of 0s for invalid data
 function normalizeMetrics(row) {
   const out = { ...row };
-  const coerce = (v) => {
+  const coerce = (v, min, max) => {
+    if (v === null || v === undefined) return null;
     const n = Number(v);
-    if (!Number.isFinite(n)) return 0;
-    // Guard against sentinel extremes sometimes used in datasets
-    if (Math.abs(n) > 1e6) return 0;
+    if (!Number.isFinite(n)) return null;
+    if (n < min || n > max) return null; // Filter out 99999 placeholder sensor values
     return n;
   };
-  if ('temperature' in out) out.temperature = coerce(out.temperature);
-  if ('salinity' in out) out.salinity = coerce(out.salinity);
-  if ('oxygen' in out) out.oxygen = coerce(out.oxygen);
-  if ('pressure' in out) out.pressure = coerce(out.pressure);
-  if ('depth' in out) out.depth = coerce(out.depth);
+  if ('temperature' in out) out.temperature = coerce(out.temperature, -5, 50);
+  if ('salinity' in out) out.salinity = coerce(out.salinity, 0, 60);
+  if ('oxygen' in out) out.oxygen = coerce(out.oxygen, 0, 1000);
+  if ('pressure' in out) out.pressure = coerce(out.pressure, -10, 12000);
+  if ('depth' in out) out.depth = coerce(out.depth, -10, 12000);
   return out;
 }
 
-// Chat with contextual data from Postgres near given lat/lon ± rangeDeg (degrees)
-app.post('/ai/chat_context', async (req, res) => {
-  console.log('Chat context request received');
+// Unified Chat endpoint with natural language geocoding and Groq API
+app.post('/ai/chat', async (req, res) => {
+  console.log('Chat request received');
   try {
-    const apiKey = process.env.GOOGLE_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: 'GOOGLE_API_KEY not set on server' });
+      return res.status(500).json({ error: 'GROQ_API_KEY not set on server' });
     }
-    const { messages = [], lat, lon, rangeDeg, limit = 100 } = req.body || {};
-    const latNum = parseFloat(lat);
-    const lonNum = parseFloat(lon);
-    const rangeNum = parseFloat(rangeDeg);
-    if (!Number.isFinite(latNum) || !Number.isFinite(lonNum) || !Number.isFinite(rangeNum)) {
-      return res.status(400).json({ error: 'lat, lon, rangeDeg must be numbers' });
+    const { messages = [] } = req.body || {};
+    
+    // Step 1: Extract intent and location from the last user message
+    const lastUserMsg = messages.filter(m => m.role === 'user').pop();
+    let extractedLocs = [];
+
+    if (lastUserMsg) {
+      const extractPrompt = `Extract all locations mentioned in the text.
+If explicit latitude and longitude are provided, extract them as "lat" and "lon" (numbers).
+If a region or place name is provided, extract it as "location_name".
+Return ONLY a JSON object in this format: {"locations": [{"location_name": string | null, "lat": number | null, "lon": number | null, "rangeDeg": number | null}]}. If no location is found, return {"locations": []}.
+
+Text: "${lastUserMsg.content}"`;
+
+      const extractResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'openai/gpt-oss-20b',
+          messages: [{ role: 'user', content: extractPrompt }],
+          response_format: { type: "json_object" },
+          temperature: 0
+        })
+      });
+      
+      if (extractResp.ok) {
+        const extractData = await extractResp.json();
+        try {
+          const parsed = JSON.parse(extractData.choices[0].message.content);
+          if (parsed.locations && Array.isArray(parsed.locations)) {
+             extractedLocs = parsed.locations;
+          } else if (parsed.location_name || parsed.lat !== null) {
+             extractedLocs = [parsed];
+          }
+        } catch(e) {
+          console.error("Failed to parse JSON from Groq", e);
+        }
+      }
     }
 
-    const latMin = latNum - rangeNum;
-    const latMax = latNum + rangeNum;
-    const lonMin = lonNum - rangeNum;
-    const lonMax = lonNum + rangeNum;
+    let summaries = [];
+    let totalRowsUsed = 0;
 
-    // Pull a bounded set of rows for context
-    const q = `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
-               FROM t1
-               WHERE latitude BETWEEN $1 AND $2
-                 AND longitude BETWEEN $3 AND $4
-                 AND (temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL)
-               ORDER BY time_ts DESC, depth ASC
-               LIMIT $5`;
-    const db = await client.query(q, [latMin, latMax, lonMin, lonMax, Math.max(1, Math.min(1000, Number(limit) || 100))]);
-    const rows = (db.rows || []).map(normalizeMetrics);
+    for (let loc of extractedLocs) {
+       let latNum = loc.lat !== null && loc.lat !== undefined ? parseFloat(loc.lat) : null;
+       let lonNum = loc.lon !== null && loc.lon !== undefined ? parseFloat(loc.lon) : null;
+       let rangeNum = loc.rangeDeg ? parseFloat(loc.rangeDeg) : 5;
+       let locationName = loc.location_name || null;
 
-    // Summarize basic stats to keep prompt small
-    const nums = (arr) => arr.map(Number).filter(n => Number.isFinite(n));
-    function stat(values) {
-      const v = nums(values);
-      if (!v.length) return null;
-      const min = Math.min(...v), max = Math.max(...v);
-      const mean = v.reduce((s, x) => s + x, 0) / v.length;
-      return { count: v.length, min, max, mean };
+       // Step 2: Geocode location name if provided but no lat/lon
+       if (locationName && latNum === null) {
+         const geoUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationName)}&format=json&limit=1`;
+         const geoResp = await fetch(geoUrl, { headers: { 'User-Agent': 'FloatChatApp/1.0' } });
+         if (geoResp.ok) {
+           const geoData = await geoResp.json();
+           if (geoData && geoData.length > 0) {
+             latNum = parseFloat(geoData[0].lat);
+             lonNum = parseFloat(geoData[0].lon);
+             rangeNum = 5;
+           }
+         }
+       }
+
+       // Step 3: Fetch Data from Database if lat/lon is available
+       if (latNum !== null && lonNum !== null && !isNaN(latNum) && !isNaN(lonNum)) {
+         const latMin = latNum - rangeNum;
+         const latMax = latNum + rangeNum;
+         const lonMin = lonNum - rangeNum;
+         const lonMax = lonNum + rangeNum;
+
+         const q = `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
+                    FROM t1
+                    WHERE latitude BETWEEN $1 AND $2
+                      AND longitude BETWEEN $3 AND $4
+                      AND (temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL)
+                    ORDER BY time_ts DESC, depth ASC
+                    LIMIT 500`;
+         const dbRes = await client.query(q, [latMin, latMax, lonMin, lonMax]);
+         let rows = (dbRes.rows || []).map(normalizeMetrics);
+         
+         // Fallback
+         if (rows.length === 0) {
+           const fallbackQ = `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
+                      FROM t1
+                      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+                        AND (temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL)
+                      ORDER BY ((latitude - $1)*(latitude - $1) + (longitude - $2)*(longitude - $2)) ASC
+                      LIMIT 100`;
+           const fallbackRes = await client.query(fallbackQ, [latNum, lonNum]);
+           rows = (fallbackRes.rows || []).map(normalizeMetrics);
+         }
+
+         const nums = (arr) => arr.filter(n => n !== null && n !== undefined).map(Number).filter(n => Number.isFinite(n));
+         function stat(values) {
+           const v = nums(values);
+           if (!v.length) return null;
+           const min = Math.min(...v), max = Math.max(...v);
+           const mean = v.reduce((s, x) => s + x, 0) / v.length;
+           return { count: v.length, min, max, mean: parseFloat(mean.toFixed(2)) };
+         }
+         
+         if (rows.length > 0) {
+           totalRowsUsed += rows.length;
+           summaries.push({
+             region: { name: locationName || "Custom Coordinates", center: { lat: latNum, lon: lonNum }, rangeDeg: rangeNum },
+             totals: rows.length,
+             depth: stat(rows.map(r => r.depth)),
+             temperature: stat(rows.map(r => r.temperature)),
+             salinity: stat(rows.map(r => r.salinity)),
+             oxygen: stat(rows.map(r => r.oxygen)),
+             points: rows.slice(0, 300) // Send up to 300 points for frontend area charts
+           });
+         }
+       }
     }
-    const summary = {
-      region: { center: { lat: latNum, lon: lonNum }, rangeDeg: rangeNum },
-      totals: rows.length,
-      depth: stat(rows.map(r => r.depth)),
-      temperature: stat(rows.map(r => r.temperature)),
-      salinity: stat(rows.map(r => r.salinity)),
-      oxygen: stat(rows.map(r => r.oxygen)),
-      sample: rows.slice(0, 10)
-    };
 
-    // Build Gemini contents with context preamble
-    const userMessages = (messages || []).map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(m.content || '') }] }));
-    const contextPreamble = {
-      role: 'user',
-      parts: [{ text: `You are provided ARGO float data context near lat=${latNum}, lon=${lonNum}, rangeDeg=${rangeNum}. Use it to answer concisely. Context JSON:\n${JSON.stringify(summary)}` }]
-    };
-    const contents = [contextPreamble, ...userMessages];
+    // Step 4: Final Chat Generation
+    let systemPrompt = "You are floatCHAT — your ocean data assistant. Answer very concisely (1-2 sentences). Use ARGO data when provided. Include numbers with units. If uncertain, say so briefly.";
+    if (summaries.length > 0) {
+      // Strip raw points so we don't blow up the LLM token limit
+      const llmContext = summaries.map(({ points, ...rest }) => rest);
+      systemPrompt += `\n\nYou are provided ARGO float data context. Use it to answer concisely. Context JSON:\n${JSON.stringify(llmContext)}`;
+    } else if (extractedLocs.length > 0) {
+      const locNames = extractedLocs.map(l => l.location_name).filter(Boolean).join(", ");
+      systemPrompt += `\n\nNo ocean data was found for the requested locations: ${locNames || 'coordinates provided'}.`;
+    }
 
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        "x-goog-api-key": apiKey
-
-      },
-      body: JSON.stringify({ contents })
+    const groqMessages = [{ role: 'system', content: systemPrompt }];
+    messages.forEach(m => {
+      // Don't inject system prompts into user messages, just use normal roles
+      if (m.role === 'user' || m.role === 'assistant') {
+        groqMessages.push({ role: m.role, content: m.content });
+      }
     });
-    if (!resp.ok) {
-      const errText = await resp.text();
-      return res.status(500).json({ error: 'Gemini API error', details: errText });
+
+    const finalResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'openai/gpt-oss-120b',
+        messages: groqMessages,
+        temperature: 0.3
+      })
+    });
+
+    if (!finalResp.ok) {
+      const errText = await finalResp.text();
+      return res.status(500).json({ error: 'Groq API error', details: errText });
     }
-    const data = await resp.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    res.json({ text, usedRows: rows.length });
+    const data = await finalResp.json();
+    const text = data.choices?.[0]?.message?.content || '';
+    res.json({ text, usedRows: totalRowsUsed, plottingData: summaries });
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Chat with context failed' });
+    console.error("Chat error:", err);
+    res.status(500).json({ error: err.message || 'Chat failed' });
   }
 });
 
@@ -254,40 +339,7 @@ app.get("/time", async (req, res) => {
   }
 });
 
-// Simple proxy to Google Gemini for chat
-app.post('/ai/chat', async (req, res) => {
-  console.log("Recevied");
-  try {
-    const apiKey = process.env.GOOGLE_API_KEY;
-    console.log(apiKey);
-    if (!apiKey) {
-      return res.status(500).json({ error: 'GOOGLE_API_KEY not set on server' });
-    }
-    const { messages = [] } = req.body || {};
-    // Convert simple role/content list to Gemini generateContent format
-    const contents = messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(m.content || '') }] }));
-
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        "x-goog-api-key": apiKey
-      },
-      body: JSON.stringify({ contents })
-    });
-    console.log(resp);
-    if (!resp.ok) {
-      const errText = await resp.text();
-      return res.status(500).json({ error: 'Gemini API error', details: errText });
-    }
-    const data = await resp.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    res.json({ text });
-  } catch (err) {
-    res.status(500).json({ error: err.message || 'Chat failed' });
-  }
-});
+// The `/ai/chat` proxy to Google Gemini has been removed as it is now integrated above
 
 app.listen(port, () => {
   console.log(`API running at http://localhost:${port}`);

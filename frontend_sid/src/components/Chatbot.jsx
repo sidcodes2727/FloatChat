@@ -72,7 +72,7 @@ function MessageBubble({ message }) {
 }
 
 /* ─── Chatbot panel ─── */
-function Chatbot({ chatOpen, setChatOpen }) {
+export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput, setChatPlotsData }) {
     const CONCISE_INSTRUCTIONS = "You are floatCHAT. Answer very concisely (1–2 sentences). Use ARGO data when provided. Include numbers with units. If uncertain, say so briefly.";
 
     const [messages, setMessages] = useState([
@@ -81,13 +81,14 @@ function Chatbot({ chatOpen, setChatOpen }) {
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [contextOpen, setContextOpen] = useState(false);
     const listRef = useRef(null);
 
-    const [lat, setLat] = useState("");
-    const [lon, setLon] = useState("");
-    const [rangeDeg, setRangeDeg] = useState("");
-    const hasContext = Number.isFinite(parseFloat(lat)) && Number.isFinite(parseFloat(lon)) && Number.isFinite(parseFloat(rangeDeg));
+    useEffect(() => {
+        if (chatInput) {
+            setInput(chatInput);
+            setChatInput('');
+        }
+    }, [chatInput, setChatInput]);
 
     useEffect(() => {
         if (!listRef.current) return;
@@ -109,11 +110,9 @@ function Chatbot({ chatOpen, setChatOpen }) {
         setMessages(prev => [...prev, userMsg]);
         setLoading(true);
         try {
-            const endpoint = hasContext ? `${API_BASE}/ai/chat_context` : `${API_BASE}/ai/chat`;
+            const endpoint = `${API_BASE}/ai/chat`;
             const baseMsgs = [{ role: 'user', content: CONCISE_INSTRUCTIONS }, ...messages, userMsg];
-            const payload = hasContext
-                ? { messages: baseMsgs.map(m => ({ role: m.role, content: m.content })), lat: parseFloat(lat), lon: parseFloat(lon), rangeDeg: parseFloat(rangeDeg) }
-                : { messages: baseMsgs.map(m => ({ role: m.role, content: m.content })) };
+            const payload = { messages: baseMsgs.map(m => ({ role: m.role, content: m.content })) };
             const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -122,9 +121,11 @@ function Chatbot({ chatOpen, setChatOpen }) {
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error || 'Failed to get response');
             const raw = (data?.text || '').trim() || "I'm not sure how to answer that yet.";
-            const sentences = raw.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
-            const reply = sentences.length > 0 ? sentences.slice(0, 160) : raw.slice(0, 160);
+            const reply = raw;
             setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: reply }]);
+            if (data?.plottingData && setChatPlotsData) {
+                setChatPlotsData(data.plottingData);
+            }
         } catch (e) {
             setError(e.message || 'Something went wrong');
             setMessages(prev => [...prev, { id: Date.now() + 2, role: 'assistant', content: 'Sorry, I could not reach the AI service.' }]);
@@ -212,54 +213,7 @@ function Chatbot({ chatOpen, setChatOpen }) {
                         </div>
                     </div>
 
-                    {/* ── Location Context ── */}
-                    <div className="shrink-0" style={{ borderBottom: '1px solid rgba(0,212,255,0.07)' }}>
-                        <button
-                            onClick={() => setContextOpen(!contextOpen)}
-                            className="w-full flex items-center justify-between px-4 py-2 text-xs transition-colors"
-                            style={{ color: hasContext ? '#00d4ff' : 'rgba(232,244,253,0.4)' }}
-                        >
-                            <div className="flex items-center gap-1.5">
-                                <MapPin size={11} />
-                                <span>Location Context {hasContext && '· Active'}</span>
-                            </div>
-                            {contextOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                        </button>
-                        <AnimatePresence>
-                            {contextOpen && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="overflow-hidden"
-                                >
-                                    <div className="grid grid-cols-3 gap-2 px-4 pb-3">
-                                        <input
-                                            type="number" step="0.01" placeholder="Lat"
-                                            value={lat} onChange={(e) => setLat(e.target.value)}
-                                            className="input-field text-xs py-1.5"
-                                        />
-                                        <input
-                                            type="number" step="0.01" placeholder="Lon"
-                                            value={lon} onChange={(e) => setLon(e.target.value)}
-                                            className="input-field text-xs py-1.5"
-                                        />
-                                        <input
-                                            type="number" step="0.1" placeholder="Range°"
-                                            value={rangeDeg} onChange={(e) => setRangeDeg(e.target.value)}
-                                            className="input-field text-xs py-1.5"
-                                        />
-                                    </div>
-                                    {hasContext && (
-                                        <div className="px-4 pb-2.5 text-[10px] font-medium" style={{ color: '#00d4ff' }}>
-                                            Context: {parseFloat(lat).toFixed(2)}°, {parseFloat(lon).toFixed(2)}° ±{parseFloat(rangeDeg)}°
-                                        </div>
-                                    )}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
+
 
                     {/* ── Messages ── */}
                     <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
@@ -360,5 +314,3 @@ function Chatbot({ chatOpen, setChatOpen }) {
         </AnimatePresence>
     );
 }
-
-export default Chatbot;

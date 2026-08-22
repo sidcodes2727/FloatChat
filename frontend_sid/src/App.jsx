@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from './components/navbar';
 import Chatbot from './components/Chatbot';
+import ChatPlots from './components/ChatPlots';
 import Dashboard from './components/Dashboard';
 import Home from './components/Home';
 import OceanMap from './components/OceanMap';
@@ -12,8 +13,16 @@ import { Bot, X } from 'lucide-react';
 function OceanVizApp() {
     const [chatOpen, setChatOpen] = useState(false);
     const [activePage, setActivePage] = useState('Home');
+    const [chatPlotsData, setChatPlotsData] = useState(null);
+    const [chatInput, setChatInput] = useState('');
+    const mainScrollRef = useRef(null);
 
     const isFullScreenMap = ['Argo Floats', 'Salinity', 'Temperature', 'Pressure', '3D Globe'].includes(activePage);
+
+    const handleMapClick = (lat, lon) => {
+        setChatInput(`Tell me about the ocean at lat ${lat.toFixed(2)}, lon ${lon.toFixed(2)}`);
+        setChatOpen(true);
+    };
 
     return (
         <div className="h-screen flex flex-col text-white w-full overflow-hidden" style={{ background: 'transparent' }}>
@@ -22,11 +31,12 @@ function OceanVizApp() {
             <AnimatePresence mode="wait">
                 <motion.div
                     key={activePage}
+                    ref={mainScrollRef}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-                    className={isFullScreenMap ? 'flex-1 relative overflow-hidden' : 'flex-1 relative overflow-y-auto'}
+                    className={isFullScreenMap ? 'flex-1 relative overflow-hidden' : 'flex-1 relative overflow-y-auto overflow-x-hidden'}
                 >
                     {activePage === 'Depth Profiles' && (
                         <div
@@ -40,14 +50,16 @@ function OceanVizApp() {
                             <Dashboard />
                         </div>
                     )}
-                    {activePage === 'Home' && <Home setActivePage={setActivePage} setChatOpen={setChatOpen} />}
-                    {activePage === 'Argo Floats' && <OceanMap setActivePage={setActivePage} />}
-                    {activePage === 'Salinity' && <MetricMap metric="salinity" />}
-                    {activePage === 'Temperature' && <MetricMap metric="temperature" />}
-                    {activePage === 'Pressure' && <MetricMap metric="pressure" />}
-                    {activePage === '3D Globe' && <GlobeMap />}
+                    {activePage === 'Home' && <Home setActivePage={setActivePage} setChatOpen={setChatOpen} mainScrollRef={mainScrollRef} />}
+                    {activePage === 'Argo Floats' && <OceanMap setActivePage={setActivePage} onMapClick={handleMapClick} />}
+                    {activePage === 'Salinity' && <MetricMap metric="salinity" onMapClick={handleMapClick} />}
+                    {activePage === 'Temperature' && <MetricMap metric="temperature" onMapClick={handleMapClick} />}
+                    {activePage === 'Pressure' && <MetricMap metric="pressure" onMapClick={handleMapClick} />}
+                    {activePage === '3D Globe' && <GlobeMap onMapClick={handleMapClick} />}
                 </motion.div>
             </AnimatePresence>
+
+            <ChatPlots data={chatPlotsData} onClose={() => setChatPlotsData(null)} />
 
             {/* ── Chatbot FAB ── */}
             <motion.button
@@ -108,7 +120,13 @@ function OceanVizApp() {
                 </AnimatePresence>
             </motion.button>
 
-            <Chatbot chatOpen={chatOpen} setChatOpen={setChatOpen} />
+            <Chatbot 
+               chatOpen={chatOpen} 
+               setChatOpen={setChatOpen} 
+               chatInput={chatInput} 
+               setChatInput={setChatInput}
+               setChatPlotsData={setChatPlotsData} 
+            />
         </div>
     );
 }

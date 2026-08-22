@@ -5,6 +5,7 @@ import {
   Gauge, ArrowRight, Sparkles, Globe, Database, Activity,
   ChevronRight, Zap, Shield, TrendingUp
 } from 'lucide-react';
+import ScrollyIntro from './ScrollyIntro';
 
 /* ─── Animated counter hook ─── */
 function useCounter(target, duration = 2000) {
@@ -205,9 +206,12 @@ function Orb({ size, color, style }) {
 }
 
 /* ─── Main Home ─── */
-export default function Home({ setActivePage, setChatOpen }) {
+export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
   return (
-    <div className="flex-1 overflow-y-auto relative">
+    <div className="flex-1 relative bg-[#040c1a]">
+      {/* ═══ SCROLLYTELLING INTRO ═══ */}
+      <ScrollyIntro scrollContainer={mainScrollRef} />
+
       {/* Background orbs */}
       <Orb
         size="600px"
