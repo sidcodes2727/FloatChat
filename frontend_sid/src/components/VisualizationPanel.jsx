@@ -311,7 +311,7 @@ export default function VisualizationPanel({ coords, comparisonLocations, onClos
                 const url = new URL(`${API_BASE}/profiles`);
                 url.searchParams.set('lat', String(coords.lat));
                 url.searchParams.set('lon', String(coords.lon));
-                url.searchParams.set('rangeDeg', '2');
+                url.searchParams.set('rangeDeg', '10');
                 const res = await fetch(url.toString());
                 if (!res.ok) throw new Error('Failed to fetch data');
                 const data = await res.json();
@@ -364,20 +364,22 @@ export default function VisualizationPanel({ coords, comparisonLocations, onClos
     function buildSingleSeries(metricKey) {
         const pts = singleRecords
             .map(r => ({ x: Number(r.depth), y: Number(r[metricKey]) }))
-            .filter(d => Number.isFinite(d.x) && Number.isFinite(d.y));
+            .filter(d => Number.isFinite(d.x) && Number.isFinite(d.y) && d.x >= 0);
         pts.sort((a, b) => a.x - b.x);
-        const res = [];
-        let currGroup = [];
-        for (let i = 0; i < pts.length; i++) {
-            currGroup.push(pts[i]);
-            if (i === pts.length - 1 || Math.abs(pts[i + 1].x - pts[i].x) > 20) {
-                const avgX = currGroup.reduce((s, p) => s + p.x, 0) / currGroup.length;
-                const avgY = currGroup.reduce((s, p) => s + p.y, 0) / currGroup.length;
-                res.push({ x: avgX, y: avgY });
-                currGroup = [];
-            }
+
+        const binSize = 10;
+        const bins = {};
+        for (const p of pts) {
+            const bin = Math.floor(p.x / binSize) * binSize;
+            if (!bins[bin]) bins[bin] = [];
+            bins[bin].push(p.y);
         }
-        return res;
+        return Object.entries(bins)
+            .map(([bin, vals]) => ({
+                x: Number(bin),
+                y: vals.reduce((s, v) => s + v, 0) / vals.length,
+            }))
+            .sort((a, b) => a.x - b.x);
     }
 
     const singleTemp = buildSingleSeries('temperature');

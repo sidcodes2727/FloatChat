@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require("express");
 const client = require("./database/db");
 const { fetchObisSpecies } = require("./services/obis_service");
+const { fetchArgovisProfiles, fetchGlobalArgovisPoints } = require("./services/argovis_service");
 const fs = require("fs");
 const path = require("path");
 const Groq = require("groq-sdk");
@@ -108,28 +109,14 @@ function resolveNamedRegion(text) {
   return null;
 }
 
-const SYSTEM_PROMPT = `You are floatCHAT, the expert oceanographic AI research assistant embedded in FloatChat — a deep-ocean visualization dashboard powered by real ARGO float data.
+const SYSTEM_PROMPT = `You are floatCHAT, a concise expert oceanographic AI assistant embedded in FloatChat.
 
-## Your Role & Capabilities
-Help users explore physical, chemical, and biological oceanography by synthesizing:
-1. **ARGO Float Data (Data Context)**: Temperature (°C), Salinity (PSU), Depth (m), and Dissolved Oxygen (µmol/kg).
-2. **Marine Biology & Ecosystem Science**: Insights on marine vegetation (phytoplankton, seagrasses, kelp, macroalgae), marine life (pelagic fish, coral reefs, benthic fauna, migratory species), and primary productivity.
-3. **Physical & Chemical Oceanography**: Thermocline depth, halocline layer, upwelling dynamics, Oxygen Minimum Zones (OMZs), and water mass characteristics.
-
-## Answer Structure & Guidelines
-Provide well-structured, clear, and informative answers using markdown formatting:
-1. **Summary & Key Metrics**: Present observed ARGO data clearly with units (°C, PSU, µmol/kg, m).
-2. **Oceanographic Analysis**: Explain physical patterns (e.g. thermocline layer, salinity gradients, oxygen concentration at depth).
-3. **Ecosystem & Marine Life Insights**:
-   - **Marine Vegetation / Primary Production**: Explain photic zone constraints (0–200m depth where sunlight enables photosynthesis by phytoplankton & algae), nutrient availability, and upwelling impact.
-   - **Marine Fauna & Biodiversity**: Explain how ocean temperatures and dissolved oxygen levels support marine life (e.g. fish species, marine mammals, coral habitats, or deep-sea organisms affected by hypoxic OMZs).
-4. **Comparative Analysis**: When multiple locations are mentioned, contrast temperature, salinity, oxygen levels, and ecological traits between the regions.
-
-## Core Rules
-1. Ground actual physical data claims in the provided DATA CONTEXT. Never invent specific numerical float measurements not given to you.
-2. If approximate nearby data is provided, use it constructively (e.g., "Nearest observations ~X° away indicate...").
-3. Use established oceanographic & marine biological knowledge for explaining ecosystems, vegetation, and species behavior.
-4. Format responses cleanly with bolding, bullet points, and subheadings where helpful. Keep explanations clear, engaging, and scientifically accurate.`;
+## Response Style Guidelines (STRICT REQUIREMENT)
+1. **Be Short and Concise**: Keep your total answer under 120 words.
+2. **Key Insights Only**: Give 3-4 bullet points maximum.
+3. **Data Grounding**: Use real temperature (°C), salinity (PSU), depth (m), and oxygen (µmol/kg) from the provided DATA CONTEXT.
+4. **Ecosystem Summary**: Briefly mention marine vegetation/life impact in 1 short bullet point.
+5. **No Verbose Essays**: Do not output long multi-paragraph sections or excessive markdown headers. Get straight to the point.`;
 
 app.get("/", (req, res) => {
   res.send("🌊 ARGO Backend API is running!");
@@ -306,15 +293,22 @@ app.post('/ai/chat_context', async (req, res) => {
     }
 
 
-    // Retrieve OBIS Marine Biodiversity data
+    // Retrieve OBIS Marine Biodiversity & Argovis Live Float Data
     let obisSummary = '';
+    let argovisSummary = '';
     try {
-      const obisData = await fetchObisSpecies(latNum, lonNum, rangeNum, 35);
-      if (obisData && obisData.summaryText) {
-        obisSummary = obisData.summaryText;
-      }
+      const [obisData, argovisData] = await Promise.all([
+        fetchObisSpecies(latNum, lonNum, rangeNum, 35),
+        fetchArgovisProfiles(latNum, lonNum, rangeNum)
+      ]);
+      if (obisData && obisData.summaryText) obisSummary = obisData.summaryText;
+      if (argovisData && argovisData.summaryText) argovisSummary = argovisData.summaryText;
     } catch (err) {
-      console.error('[OBIS] Error in chat_context:', err.message);
+      console.error('[CONTEXT-ENRICHMENT] Error in chat_context:', err.message);
+    }
+
+    if (argovisSummary) {
+      preambleText += `\n[ARGOVIS LIVE GLOBAL ARGO DATA]\n${argovisSummary}\n`;
     }
 
     if (obisSummary) {
@@ -525,14 +519,20 @@ app.post('/ai/chat', async (req, res) => {
       } else {
         preambleText += `[DATA CONTEXT]\n(No matching data found)\n`;
       }
-      // Retrieve OBIS Marine Biodiversity data for extracted region
+      // Retrieve OBIS Marine Biodiversity & Argovis Live Float Data for extracted region
       try {
-        const obisData = await fetchObisSpecies(extractedLat, extractedLon, resolvedRangeDeg, 35);
+        const [obisData, argovisData] = await Promise.all([
+          fetchObisSpecies(extractedLat, extractedLon, resolvedRangeDeg, 35),
+          fetchArgovisProfiles(extractedLat, extractedLon, resolvedRangeDeg)
+        ]);
+        if (argovisData && argovisData.summaryText) {
+          preambleText += `\n[ARGOVIS LIVE GLOBAL ARGO DATA]\n${argovisData.summaryText}\n`;
+        }
         if (obisData && obisData.summaryText) {
           preambleText += `\n[OBIS BIODIVERSITY CONTEXT]\n${obisData.summaryText}\n`;
         }
       } catch (err) {
-        console.error('[OBIS] Error in /ai/chat:', err.message);
+        console.error('[CONTEXT-ENRICHMENT] Error in /ai/chat:', err.message);
       }
     } else {
       preambleText += `[DATA CONTEXT]\n(No coordinates detected in the user's message and no region selected on the map.)\n`;
@@ -604,51 +604,49 @@ app.post('/compare', async (req, res) => {
     const results = await Promise.all(locations.map(async (loc) => {
       const latNum = parseFloat(loc.lat);
       const lonNum = parseFloat(loc.lon);
-      const rangeDeg = parseFloat(loc.rangeDeg) || 2;
+      const rangeDeg = parseFloat(loc.rangeDeg) || 5;
 
       if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
         return { label: loc.label || 'Unknown', lat: latNum, lon: lonNum, records: [], error: 'Invalid coordinates' };
       }
 
-      const dbLon = lonNum < 0 ? lonNum + 360 : lonNum;
-      const latMin = latNum - rangeDeg;
-      const latMax = latNum + rangeDeg;
-      const lonMin = dbLon - rangeDeg;
-      const lonMax = dbLon + rangeDeg;
-
+      let records = [];
       try {
-        const result = await client.query(
-          `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
-           FROM t1
-           WHERE latitude BETWEEN $1 AND $2
-             AND longitude BETWEEN $3 AND $4
-             AND depth IS NOT NULL
-           ORDER BY depth ASC
-           LIMIT 2000`,
-          [latMin, latMax, lonMin, lonMax]
-        );
-        const records = (result.rows || []).map(normalizeMetrics);
+        // Fetch Live Argovis ARGO Profiles directly for multi-depth comparison curves (0m - 2000m)
+        const argovisData = await fetchArgovisProfiles(latNum, lonNum, Math.max(rangeDeg, 10));
+        if (argovisData && argovisData.profiles && argovisData.profiles.length > 0) {
+          argovisData.profiles.forEach(p => {
+            (p.measurements || []).forEach(m => {
+              if (m.depth != null && (m.temp != null || m.sal != null || m.oxy != null)) {
+                records.push({
+                  depth: m.depth,
+                  temperature: m.temp,
+                  salinity: m.sal,
+                  oxygen: m.oxy,
+                  pressure: m.depth,
+                  latitude: p.lat,
+                  longitude: p.lon
+                });
+              }
+            });
+          });
+        }
 
-        // If no direct data, fall back to nearest
+        // Fallback to local DB if Argovis returned no profiles for this coordinate
         if (records.length === 0) {
-          const fallback = await client.query(
+          const dbLon = lonNum < 0 ? lonNum + 360 : lonNum;
+          const dbRes = await client.query(
             `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
              FROM t1
-             WHERE (temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL)
-             ORDER BY ((latitude - $1)^2 + (longitude - $2)^2) ASC
-             LIMIT 500`,
-            [latNum, dbLon]
+             WHERE latitude BETWEEN $1 AND $2 AND longitude BETWEEN $3 AND $4
+             ORDER BY depth ASC LIMIT 1000`,
+            [latNum - rangeDeg, latNum + rangeDeg, dbLon - rangeDeg, dbLon + rangeDeg]
           );
-          return {
-            label: loc.label || `${latNum.toFixed(1)}, ${lonNum.toFixed(1)}`,
-            lat: latNum, lon: lonNum,
-            records: (fallback.rows || []).map(normalizeMetrics),
-            isFallback: true
-          };
+          records = (dbRes.rows || []).map(normalizeMetrics);
         }
 
         return {
-          label: loc.label || `${latNum.toFixed(1)}, ${lonNum.toFixed(1)}`,
+          label: loc.label || `${latNum.toFixed(1)}°, ${lonNum.toFixed(1)}°`,
           lat: latNum, lon: lonNum,
           records
         };
@@ -661,6 +659,59 @@ app.post('/compare', async (req, res) => {
   } catch (err) {
     console.error('Compare endpoint failed:', err);
     res.status(500).json({ error: 'Failed to compare locations.' });
+  }
+});
+
+app.get("/profiles", async (req, res) => {
+  try {
+    const lat = parseFloat(req.query.lat);
+    const lon = parseFloat(req.query.lon);
+    const rangeDeg = parseFloat(req.query.rangeDeg) || 10;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return res.json([]);
+    }
+
+    // Fetch Live Argovis ARGO Profiles for multi-depth profile curves (0m - 2000m)
+    const argovisData = await fetchArgovisProfiles(lat, lon, rangeDeg);
+    let records = [];
+
+    if (argovisData && argovisData.profiles && argovisData.profiles.length > 0) {
+      argovisData.profiles.forEach(p => {
+        (p.measurements || []).forEach(m => {
+          if (m.depth != null && (m.temp != null || m.sal != null || m.oxy != null)) {
+            records.push({
+              depth: m.depth,
+              temperature: m.temp,
+              salinity: m.sal,
+              oxygen: m.oxy,
+              pressure: m.depth
+            });
+          }
+        });
+      });
+    }
+
+    // Fallback to DB if Argovis returned no profile points
+    if (records.length === 0) {
+      try {
+        const dbLon = lon < 0 ? lon + 360 : lon;
+        const dbRes = await client.query(
+          `SELECT depth, temperature, salinity, oxygen, pressure 
+           FROM t1 
+           WHERE latitude BETWEEN $1 AND $2 AND longitude BETWEEN $3 AND $4
+           ORDER BY depth ASC LIMIT 500`,
+          [lat - rangeDeg, lat + rangeDeg, dbLon - rangeDeg, dbLon + rangeDeg]
+        );
+        records = (dbRes.rows || []).map(normalizeMetrics);
+      } catch (e) {
+        records = [];
+      }
+    }
+
+    res.json(records);
+  } catch (err) {
+    console.error("GET /profiles error:", err);
+    res.json([]);
   }
 });
 
@@ -839,6 +890,74 @@ app.get("/api/obis/species", async (req, res) => {
   } catch (err) {
     console.error("OBIS API error:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/argovis/profiles", async (req, res) => {
+  try {
+    const lat = parseFloat(req.query.lat);
+    const lon = parseFloat(req.query.lon);
+    const rangeDeg = parseFloat(req.query.rangeDeg) || 5;
+    const startDate = req.query.startDate || null;
+    const endDate = req.query.endDate || null;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return res.status(400).json({ error: "lat and lon query parameters are required" });
+    }
+    const argovisData = await fetchArgovisProfiles(lat, lon, rangeDeg, startDate, endDate);
+    if (!argovisData) {
+      return res.status(500).json({ error: "Failed to fetch Argovis profiles" });
+    }
+    res.json(argovisData);
+  } catch (err) {
+    console.error("Argovis API endpoint error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/argovis/global", async (req, res) => {
+  try {
+    const points = await fetchGlobalArgovisPoints();
+    res.json(points || []);
+  } catch (err) {
+    console.error("Global Argovis endpoint error:", err);
+    res.json([]);
+  }
+});
+
+app.get("/api/argovis/live_points", async (req, res) => {
+  try {
+    if (!req.query.lat && !req.query.lon) {
+      const globalPoints = await fetchGlobalArgovisPoints();
+      return res.json(globalPoints);
+    }
+    const lat = parseFloat(req.query.lat) || 15;
+    const lon = parseFloat(req.query.lon) || 65;
+    const rangeDeg = parseFloat(req.query.rangeDeg) || 30;
+    const data = await fetchArgovisProfiles(lat, lon, rangeDeg);
+    if (!data || !data.profiles) {
+      return res.json([]);
+    }
+    const points = data.profiles.map(p => {
+      const topM = p.measurements[0] || {};
+      return {
+        id: `argovis_${p.floatId}`,
+        latitude: p.lat,
+        longitude: p.lon,
+        depth: topM.depth != null ? topM.depth : 10,
+        temperature: topM.temp,
+        salinity: topM.sal,
+        oxygen: topM.oxy,
+        pressure: topM.depth,
+        floatId: p.floatId,
+        timestamp: p.timestamp,
+        isArgovis: true,
+        source: 'Argovis (Colorado)'
+      };
+    });
+    res.json(points);
+  } catch (err) {
+    console.error("Argovis live points error:", err);
+    res.json([]);
   }
 });
 

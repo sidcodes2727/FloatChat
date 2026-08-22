@@ -26,27 +26,31 @@ export default function GlobeMap() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await fetch(`${API_BASE}/depth`);
-        const rawData = await response.json();
+        const response = await fetch(`${API_BASE}/api/argovis/global`);
+        const rawArgovis = await response.json();
 
-        if (rawData.length) {
-          const cleaned = rawData
-            .filter(
-              (d) =>
-                d.latitude != null &&
-                d.longitude != null &&
-                Number.isFinite(Number(d.latitude)) &&
-                Number.isFinite(Number(d.longitude))
-            )
-            .map((d) => ({
+        if (Array.isArray(rawArgovis) && rawArgovis.length > 0) {
+          const cleaned = rawArgovis.map(d => ({
+            ...d,
+            lat: Number(d.latitude),
+            lng: Number(d.longitude),
+            altitude: 0.12,
+            color: d.temperature != null ? getColorForTemperature(Number(d.temperature)) : '#00ffff',
+          }));
+          setData(cleaned);
+        } else {
+          const dbRes = await fetch(`${API_BASE}/depth`);
+          const rawData = await dbRes.json();
+          if (Array.isArray(rawData)) {
+            const cleaned = rawData.map(d => ({
               ...d,
               lat: Number(d.latitude),
               lng: Number(d.longitude),
-              // Map depth to a reasonable altitude scale for the 3D bars (0 to ~0.5)
-              altitude: d.depth != null ? Math.min(0.5, Number(d.depth) / 10000) : 0.05,
-              color: d.temperature != null ? getColorForTemperature(Number(d.temperature)) : '#00d4ff',
+              altitude: 0.1,
+              color: '#00d4ff'
             }));
-          setData(cleaned);
+            setData(cleaned);
+          }
         }
       } catch (e) {
         console.error('Error fetching data for Globe Map:', e);

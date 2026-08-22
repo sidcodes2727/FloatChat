@@ -10,14 +10,14 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json';
 
 const INITIAL_VIEW_STATE = {
-  longitude: 80,
-  latitude: 22,
-  zoom: 4,
+  longitude: 10,
+  latitude: 15,
+  zoom: 2.2,
   pitch: 0,
   bearing: 0,
 };
 
-// Provide sensible fallback points with valid coordinates (near India)
+// Provide sensible fallback points with valid coordinates
 const fallbackData = [
   { id: 1, depth: 10, pressure: 5, temperature: 20, latitude: 19.0, longitude: 72.8 },
   { id: 2, depth: 20, pressure: 10, temperature: 25, latitude: 13.0, longitude: 80.3 },
@@ -27,56 +27,43 @@ const fallbackData = [
 export default function OceanMap({ setActivePage, onPointClick }) {
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
   const [data, setData] = useState([]);
+  const [argovisCount, setArgovisCount] = useState(0);
   const [hoverInfo, setHoverInfo] = useState(null); // {x,y,coordinate,object}
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await fetch(`${API_BASE}/depth`);
-        const rawData = await response.json();
+        const response = await fetch(`${API_BASE}/api/argovis/global`);
+        const rawArgovis = await response.json();
 
-        console.log('Fetched data sample:', rawData[0]);
-
-        if (rawData.length && rawData[0].latitude != null && rawData[0].longitude != null) {
-          const cleaned = rawData
-            .filter(
-              (d) =>
-                d.latitude != null &&
-                d.longitude != null &&
-                Math.abs(d.latitude) <= 90 &&
-                Math.abs(d.longitude) <= 360 &&
-                Number.isFinite(Number(d.depth))
-            )
-            .map((d) => ({
+        if (Array.isArray(rawArgovis) && rawArgovis.length > 0) {
+          const argovisPoints = rawArgovis.map(p => ({
+            ...p,
+            longitude: p.longitude > 180 ? p.longitude - 360 : p.longitude,
+          }));
+          setArgovisCount(argovisPoints.length);
+          setData(argovisPoints);
+        } else {
+          // Fallback to local depth endpoint if Argovis is offline
+          const dbRes = await fetch(`${API_BASE}/depth`);
+          const dbData = await dbRes.json();
+          if (Array.isArray(dbData)) {
+            const cleaned = dbData.map(d => ({
               ...d,
               longitude: d.longitude > 180 ? d.longitude - 360 : d.longitude,
             }));
-
-          if (cleaned.length) {
-            const avgLat =
-              cleaned.reduce((sum, d) => sum + d.latitude, 0) / cleaned.length;
-            const avgLon =
-              cleaned.reduce((sum, d) => sum + d.longitude, 0) / cleaned.length;
-            setViewState((v) => ({
-              ...v,
-              latitude: avgLat,
-              longitude: avgLon,
-              zoom: 6,
-            }));
+            setData(cleaned);
           }
-          setData(cleaned);
-        } else {
-          setData(fallbackData);
         }
       } catch (e) {
-        console.error('Error fetching data:', e);
+        console.error('Error fetching global Argovis map data:', e);
         setData(fallbackData);
       }
     }
     fetchData();
   }, []);
 
-  // Ensure only valid points are passed to DeckGL to avoid runtime errors
+  // Ensure only valid points are passed to DeckGL
   const safePoints = (data || []).filter(
     (d) =>
       d &&
@@ -93,21 +80,18 @@ export default function OceanMap({ setActivePage, onPointClick }) {
       pickable: true,
       stroked: true,
       filled: true,
-      opacity: 0.8,
+      opacity: 0.9,
       radiusScale: 10,
-      radiusMinPixels: 5,
-      radiusMaxPixels: 50,
+      radiusMinPixels: 4,
+      radiusMaxPixels: 30,
       getPosition: (d) => [d.longitude, d.latitude],
-      getRadius: () => 6,
+      getRadius: () => 4,
+      getLineColor: [0, 0, 0, 150],
+      lineWidthMinPixels: 0.5,
       getFillColor: (d) => {
-        const z = Number(d.depth);
-        if (!Number.isFinite(z)) return [150, 150, 150];
-        // Shallow -> bright cyan, Deep -> dark blue
-        const t = Math.max(0, Math.min(1, z / 5000));
-        const r = 0;
-        const g = Math.floor(200 - 120 * t);
-        const b = Math.floor(255 - 80 * t);
-        return [r, g, b];
+        if (d.floatType === 'bgc') return [34, 197, 94];   // 🟢 Green for BGC Floats
+        if (d.floatType === 'deep') return [59, 130, 246];  // 🔵 Blue for Deep Floats
+        return [250, 204, 21];                             // 🟡 Yellow for Core Floats
       },
       onHover: (info) => {
         if (!info || !info.coordinate || !info.object) {
@@ -124,6 +108,10 @@ export default function OceanMap({ setActivePage, onPointClick }) {
     }),
   ];
 
+  const coreCount = safePoints.filter(p => p.floatType === 'core').length;
+  const bgcCount = safePoints.filter(p => p.floatType === 'bgc').length;
+  const deepCount = safePoints.filter(p => p.floatType === 'deep').length;
+
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
       {/* Back to Home */}
@@ -135,10 +123,27 @@ export default function OceanMap({ setActivePage, onPointClick }) {
         Back
       </button>
 
-      {/* Point count badge */}
-      <div className="absolute top-3 right-3 z-10 glass-subtle rounded-lg px-3 py-1.5 flex items-center gap-1.5">
-        <Layers size={12} className="text-[var(--accent)]" />
-        <span className="text-xs text-white/60">{safePoints.length.toLocaleString()} points</span>
+      {/* Point count badge & Argovis Legend */}
+      <div className="absolute top-3 right-3 z-10 glass-subtle rounded-lg px-3.5 py-2 flex items-center gap-3 shadow-xl backdrop-blur-md border border-white/10">
+        <div className="flex items-center gap-1.5">
+          <Layers size={14} className="text-cyan-400" />
+          <span className="text-xs font-semibold text-white/90">{safePoints.length.toLocaleString()} Global Floats</span>
+        </div>
+        <div className="h-4 w-px bg-white/15" />
+        <div className="flex items-center gap-2.5 text-[11px] font-medium">
+          <span className="flex items-center gap-1 text-yellow-400">
+            <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 shadow-[0_0_8px_#facc15]" />
+            Core ({coreCount})
+          </span>
+          <span className="flex items-center gap-1 text-green-400">
+            <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]" />
+            BGC ({bgcCount})
+          </span>
+          <span className="flex items-center gap-1 text-blue-400">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]" />
+            Deep ({deepCount})
+          </span>
+        </div>
       </div>
 
       <DeckGL
@@ -156,25 +161,50 @@ export default function OceanMap({ setActivePage, onPointClick }) {
       </DeckGL>
       {safePoints.length === 0 && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 glass-subtle text-white/60 px-3 py-1.5 rounded-lg text-xs">
-          No points available to display.
+          Loading global ARGO dataset...
         </div>
       )}
       {hoverInfo && (
         <div
           style={{
             position: 'absolute',
-            left: Math.min(Math.max(8, hoverInfo.x + 12), window.innerWidth - 240),
-            top: Math.min(Math.max(8, hoverInfo.y + 12), window.innerHeight - 120)
+            left: Math.min(Math.max(8, hoverInfo.x + 12), window.innerWidth - 250),
+            top: Math.min(Math.max(8, hoverInfo.y + 12), window.innerHeight - 150)
           }}
           className="tooltip-card"
         >
+          {hoverInfo.object && (
+            <div className="mb-1">
+              {hoverInfo.object.floatType === 'bgc' && (
+                <div className="text-[11px] uppercase font-bold text-green-400 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-400" /> 🟢 ARGO BGC Float #{hoverInfo.object.floatId}
+                </div>
+              )}
+              {hoverInfo.object.floatType === 'deep' && (
+                <div className="text-[11px] uppercase font-bold text-blue-400 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-400" /> 🔵 Deep ARGO Float #{hoverInfo.object.floatId}
+                </div>
+              )}
+              {(!hoverInfo.object.floatType || hoverInfo.object.floatType === 'core') && (
+                <div className="text-[11px] uppercase font-bold text-yellow-400 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-yellow-400" /> 🟡 ARGO Core Float #{hoverInfo.object.floatId || hoverInfo.object.id}
+                </div>
+              )}
+            </div>
+          )}
           <div className="text-white/60 text-[11px] mb-1">
             {hoverInfo.coordinate[1].toFixed(3)}°, {hoverInfo.coordinate[0].toFixed(3)}°
           </div>
-          {hoverInfo.object && hoverInfo.object.depth != null ? (
-            <div className="text-white/80 text-xs">Depth: <span className="text-[var(--accent)] font-semibold">{Number(hoverInfo.object.depth).toFixed(0)}</span> m</div>
-          ) : (
-            <div className="text-white/40 text-xs">No point under cursor</div>
+          {hoverInfo.object && (
+            <div className="text-white/80 text-xs">
+              <div>Cycle: <span className="text-cyan-300 font-semibold">{hoverInfo.object.cycle || 'Active'}</span></div>
+              {hoverInfo.object.temperature != null && (
+                <div>Temp: <span className="text-amber-400 font-semibold">{Number(hoverInfo.object.temperature).toFixed(2)}</span> °C</div>
+              )}
+              {hoverInfo.object.salinity != null && (
+                <div>Salinity: <span className="text-purple-400 font-semibold">{Number(hoverInfo.object.salinity).toFixed(2)}</span> PSU</div>
+              )}
+            </div>
           )}
         </div>
       )}

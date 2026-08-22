@@ -78,19 +78,26 @@ export default function MetricMap({ metric = 'salinity', onPointClick }) {
     async function load() {
       try {
         setError(null);
-        const res = await fetch(`${API_BASE}/${metric}`);
-        const data = await res.json();
-        const cleaned = (Array.isArray(data) ? data : []).filter(
-          d => d.latitude != null && d.longitude != null && Math.abs(d.latitude) <= 90 && Math.abs(d.longitude) <= 360
-        );
-        setRows(cleaned);
-        if (cleaned.length) {
-          const avgLat = cleaned.reduce((s, d) => s + Number(d.latitude), 0) / cleaned.length;
-          const avgLon = cleaned.reduce((s, d) => s + (Number(d.longitude) > 180 ? Number(d.longitude) - 360 : Number(d.longitude)), 0) / cleaned.length;
-          setViewState(v => ({ ...v, latitude: avgLat, longitude: avgLon, zoom: 3 }));
+        const res = await fetch(`${API_BASE}/api/argovis/global`);
+        const rawArgovis = await res.json();
+
+        let cleaned = [];
+        if (Array.isArray(rawArgovis) && rawArgovis.length > 0) {
+          cleaned = rawArgovis.filter(
+            d => d && d.latitude != null && d.longitude != null && Math.abs(d.latitude) <= 90 && Math.abs(d.longitude) <= 360
+          );
+        } else {
+          // Fallback to local metric endpoint
+          const localRes = await fetch(`${API_BASE}/${metric}`);
+          const dbData = await localRes.json();
+          if (Array.isArray(dbData)) {
+            cleaned = dbData.filter(d => d.latitude != null && d.longitude != null);
+          }
         }
+
+        setRows(cleaned);
       } catch (e) {
-        setError(e.message || 'Failed to load');
+        setError(e.message || 'Failed to load global map data');
       }
     }
     load();
