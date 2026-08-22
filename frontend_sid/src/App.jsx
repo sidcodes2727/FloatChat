@@ -14,6 +14,7 @@ function OceanVizApp() {
     const [chatOpen, setChatOpen] = useState(false);
     const [activePage, setActivePage] = useState('Home');
     const [selectedCoords, setSelectedCoords] = useState(null); // { lat, lon } from map click
+    const [comparisonLocations, setComparisonLocations] = useState(null); // array of {lat,lon,label}
     const [visPanelOpen, setVisPanelOpen] = useState(false);
 
     const isFullScreenMap = ['Argo Floats', 'Salinity', 'Temperature', 'Pressure', '3D Globe'].includes(activePage);
@@ -48,10 +49,10 @@ function OceanVizApp() {
                         </div>
                     )}
                     {activePage === 'Home' && <Home setActivePage={setActivePage} setChatOpen={setChatOpen} />}
-                    {activePage === 'Argo Floats' && <OceanMap setActivePage={setActivePage} onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setVisPanelOpen(true); setChatOpen(true); }} />}
-                    {activePage === 'Salinity' && <MetricMap metric="salinity" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setVisPanelOpen(true); setChatOpen(true); }} />}
-                    {activePage === 'Temperature' && <MetricMap metric="temperature" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setVisPanelOpen(true); setChatOpen(true); }} />}
-                    {activePage === 'Pressure' && <MetricMap metric="pressure" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setVisPanelOpen(true); setChatOpen(true); }} />}
+                    {activePage === 'Argo Floats' && <OceanMap setActivePage={setActivePage} onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setComparisonLocations(null); setVisPanelOpen(true); setChatOpen(true); }} />}
+                    {activePage === 'Salinity' && <MetricMap metric="salinity" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setComparisonLocations(null); setVisPanelOpen(true); setChatOpen(true); }} />}
+                    {activePage === 'Temperature' && <MetricMap metric="temperature" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setComparisonLocations(null); setVisPanelOpen(true); setChatOpen(true); }} />}
+                    {activePage === 'Pressure' && <MetricMap metric="pressure" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setComparisonLocations(null); setVisPanelOpen(true); setChatOpen(true); }} />}
                     {activePage === '3D Globe' && <GlobeMap />}
                 </motion.div>
                 </AnimatePresence>
@@ -122,14 +123,25 @@ function OceanVizApp() {
                 selectedCoords={selectedCoords} 
                 onDataVisualized={(lat, lon) => {
                     setSelectedCoords({ lat, lon });
+                    setComparisonLocations(null);
+                    setVisPanelOpen(true);
+                }}
+                onCompareLocations={(locations) => {
+                    setComparisonLocations(locations);
+                    setSelectedCoords(null);
                     setVisPanelOpen(true);
                 }}
             />
 
-            {/* Render the side panel, conditionally mounted or using its own AnimatePresence */}
+            {/* Side Panel: supports single location and multi-location comparison */}
             <VisualizationPanel 
                 coords={visPanelOpen ? selectedCoords : null} 
-                onClose={() => setVisPanelOpen(false)} 
+                comparisonLocations={visPanelOpen ? comparisonLocations : null}
+                onClose={() => {
+                    setVisPanelOpen(false);
+                    setSelectedCoords(null);
+                    setComparisonLocations(null);
+                }} 
             />
         </div>
     );

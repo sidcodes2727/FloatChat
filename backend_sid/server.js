@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require("express");
 const client = require("./database/db");
+const { fetchObisSpecies } = require("./services/obis_service");
 const fs = require("fs");
 const path = require("path");
 const Groq = require("groq-sdk");
@@ -60,30 +61,75 @@ function retrieveDocs(queryText, limit = 3) {
     .map(doc => doc.text);
 }
 
-const SYSTEM_PROMPT = `You are floatCHAT, the AI research assistant embedded in FloatChat — a deep-ocean visualization dashboard powered by real ARGO float data.
+// Named ocean / sea region → bounding box { centerLat, centerLon, rangeDeg }
+const OCEAN_REGIONS = {
+  // Major Oceans
+  'indian ocean':      { centerLat: -20,  centerLon:  80,  rangeDeg: 40 },
+  'pacific ocean':     { centerLat:   0,  centerLon: 180,  rangeDeg: 60 },
+  'north pacific':     { centerLat:  30,  centerLon: 180,  rangeDeg: 35 },
+  'south pacific':     { centerLat: -30,  centerLon: 200,  rangeDeg: 35 },
+  'atlantic ocean':    { centerLat:   0,  centerLon: -30,  rangeDeg: 50 },
+  'north atlantic':    { centerLat:  40,  centerLon: -35,  rangeDeg: 30 },
+  'south atlantic':    { centerLat: -30,  centerLon: -20,  rangeDeg: 30 },
+  'arctic ocean':      { centerLat:  85,  centerLon:   0,  rangeDeg: 15 },
+  'southern ocean':    { centerLat: -65,  centerLon:   0,  rangeDeg: 20 },
+  'antarctic ocean':   { centerLat: -65,  centerLon:   0,  rangeDeg: 20 },
+  // Seas
+  'arabian sea':       { centerLat:  15,  centerLon:  65,  rangeDeg: 12 },
+  'bay of bengal':     { centerLat:  13,  centerLon:  88,  rangeDeg: 10 },
+  'mediterranean':     { centerLat:  36,  centerLon:  18,  rangeDeg: 12 },
+  'mediterranean sea': { centerLat:  36,  centerLon:  18,  rangeDeg: 12 },
+  'caribbean sea':     { centerLat:  15,  centerLon: -75,  rangeDeg: 10 },
+  'caribbean':         { centerLat:  15,  centerLon: -75,  rangeDeg: 10 },
+  'red sea':           { centerLat:  20,  centerLon:  38,  rangeDeg:  6 },
+  'gulf of mexico':    { centerLat:  25,  centerLon: -90,  rangeDeg:  8 },
+  'south china sea':   { centerLat:  12,  centerLon: 114,  rangeDeg: 10 },
+  'coral sea':         { centerLat: -18,  centerLon: 154,  rangeDeg: 10 },
+  'tasman sea':        { centerLat: -38,  centerLon: 160,  rangeDeg:  8 },
+  'bering sea':        { centerLat:  58,  centerLon: 180,  rangeDeg: 10 },
+  'north sea':         { centerLat:  57,  centerLon:   4,  rangeDeg:  6 },
+  'persian gulf':      { centerLat:  26,  centerLon:  52,  rangeDeg:  4 },
+};
 
-## Your role
-Help users understand oceanographic data by combining:
-1. Retrieved statistical summaries from the ARGO float database (structured data)
-2. Retrieved reference knowledge about oceanography and the ARGO program (unstructured docs)
+/**
+ * Given a user message string, return a region match { centerLat, centerLon, rangeDeg, name }
+ * or null if no named region is found.
+ */
+function resolveNamedRegion(text) {
+  if (!text || typeof text !== 'string') return null;
+  const lower = text.toLowerCase();
+  // Sort keys longest-first so more specific matches win (e.g. "north atlantic" before "atlantic")
+  const keys = Object.keys(OCEAN_REGIONS).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    if (lower.includes(key)) {
+      return { ...OCEAN_REGIONS[key], name: key };
+    }
+  }
+  return null;
+}
 
-You will be given a CONTEXT block before each user question containing one or both of:
-- DATA CONTEXT: real statistics (min/max/mean/count) for temperature, salinity, depth, and oxygen from floats matching the user's specified region/time range
-- REFERENCE CONTEXT: retrieved passages from oceanography documentation
+const SYSTEM_PROMPT = `You are floatCHAT, the expert oceanographic AI research assistant embedded in FloatChat — a deep-ocean visualization dashboard powered by real ARGO float data.
 
-## Rules
-1. Ground every factual claim about actual ocean conditions in the DATA CONTEXT provided. Never invent specific numbers, float IDs, or coordinates that were not given to you.
-2. When the DATA CONTEXT provides "approximate nearby data", USE that data! Present it as approximate/nearby data and include the distance. Do NOT refuse to answer. Say something like "I don't have exact data for your coordinate, but the nearest ARGO observations (~X° away) show..."
-3. ONLY if the DATA CONTEXT explicitly states "(No matching data found)" or "(No ARGO data found globally)", explicitly state: "I don't have ARGO observations for that region in the current dataset; could you select that region on the map so I can retrieve the relevant profiles?"
-4. Use REFERENCE CONTEXT for explaining concepts (e.g., "what is a thermocline", "how does ARGO measure salinity") — cite it naturally without saying "according to the context."
-5. If a question requires data you don't have context for, tell the user to select that region on the map first, or ask a clarifying question.
-6. Keep answers concise and data-forward. Prefer a short paragraph plus key numbers over long essays. This is a dashboard sidebar chat, not a report.
-7. When relevant, describe patterns in plain oceanographic terms (e.g., "this indicates a strong halocline around 200m") rather than just repeating numbers back.
-8. Never fabricate float IDs, timestamps, or precise coordinates. If asked for specifics not present in DATA CONTEXT, say you don't have that specific reading available.
-9. If the user's question is ambiguous about location or time range, ask ONE clarifying question rather than guessing.
+## Your Role & Capabilities
+Help users explore physical, chemical, and biological oceanography by synthesizing:
+1. **ARGO Float Data (Data Context)**: Temperature (°C), Salinity (PSU), Depth (m), and Dissolved Oxygen (µmol/kg).
+2. **Marine Biology & Ecosystem Science**: Insights on marine vegetation (phytoplankton, seagrasses, kelp, macroalgae), marine life (pelagic fish, coral reefs, benthic fauna, migratory species), and primary productivity.
+3. **Physical & Chemical Oceanography**: Thermocline depth, halocline layer, upwelling dynamics, Oxygen Minimum Zones (OMZs), and water mass characteristics.
 
-## Tone
-Precise, calm, and scientifically literate — like a knowledgeable colleague, not a generic chatbot. Avoid excessive enthusiasm or filler phrases.`;
+## Answer Structure & Guidelines
+Provide well-structured, clear, and informative answers using markdown formatting:
+1. **Summary & Key Metrics**: Present observed ARGO data clearly with units (°C, PSU, µmol/kg, m).
+2. **Oceanographic Analysis**: Explain physical patterns (e.g. thermocline layer, salinity gradients, oxygen concentration at depth).
+3. **Ecosystem & Marine Life Insights**:
+   - **Marine Vegetation / Primary Production**: Explain photic zone constraints (0–200m depth where sunlight enables photosynthesis by phytoplankton & algae), nutrient availability, and upwelling impact.
+   - **Marine Fauna & Biodiversity**: Explain how ocean temperatures and dissolved oxygen levels support marine life (e.g. fish species, marine mammals, coral habitats, or deep-sea organisms affected by hypoxic OMZs).
+4. **Comparative Analysis**: When multiple locations are mentioned, contrast temperature, salinity, oxygen levels, and ecological traits between the regions.
+
+## Core Rules
+1. Ground actual physical data claims in the provided DATA CONTEXT. Never invent specific numerical float measurements not given to you.
+2. If approximate nearby data is provided, use it constructively (e.g., "Nearest observations ~X° away indicate...").
+3. Use established oceanographic & marine biological knowledge for explaining ecosystems, vegetation, and species behavior.
+4. Format responses cleanly with bolding, bullet points, and subheadings where helpful. Keep explanations clear, engaging, and scientifically accurate.`;
 
 app.get("/", (req, res) => {
   res.send("🌊 ARGO Backend API is running!");
@@ -124,28 +170,41 @@ app.post('/ai/chat_context', async (req, res) => {
     let extractedLon = null;
     const lastUserMessage = messages.slice().reverse().find(m => m.role === 'user')?.content || '';
     const normalizedText = lastUserMessage.replace(/[°˚º]/g, ' ').replace(/\u200B/g, '');
-    const coordPatterns = [
-      /(-?\d+\.?\d*)\s*([NS])\s*[,;\s]+\s*(-?\d+\.?\d*)\s*([EW])/i,
-      /lat(?:itude)?\s*[:=]?\s*(-?\d+\.?\d*)\s*[,;\s]+\s*lon(?:gitude)?\s*[:=]?\s*(-?\d+\.?\d*)/i,
-      /\(?\s*(-?\d+\.?\d*)\s*(?:and|,|;|\s)+\s*(-?\d+\.?\d*)\s*\)?/i,
-    ];
-    for (const pattern of coordPatterns) {
-      const match = normalizedText.match(pattern);
-      if (match) {
-        if (match[2] && /[NSEW]/i.test(match[2])) {
-          extractedLat = parseFloat(match[1]);
-          if (/[Ss]/.test(match[2])) extractedLat = -extractedLat;
-          extractedLon = parseFloat(match[3]);
-          if (/[Ww]/.test(match[4])) extractedLon = -extractedLon;
-        } else {
-          const a = parseFloat(match[1]);
-          const b = parseFloat(match[2]);
-          if (Math.abs(a) <= 90 && Math.abs(b) <= 180) {
-            extractedLat = a;
-            extractedLon = b;
+
+    // Check for named ocean region first
+    const namedRegion = resolveNamedRegion(lastUserMessage);
+    if (namedRegion) {
+      console.log(`[CONTEXT-REGION] Resolved named region: ${namedRegion.name}`);
+      extractedLat = namedRegion.centerLat;
+      extractedLon = namedRegion.centerLon;
+      latNum = namedRegion.centerLat;
+      lonNum = namedRegion.centerLon;
+    }
+
+    if (!namedRegion) {
+      const coordPatterns = [
+        /(-?\d+\.?\d*)\s*([NS])\s*[,;\s]+\s*(-?\d+\.?\d*)\s*([EW])/i,
+        /lat(?:itude)?\s*[:=]?\s*(-?\d+\.?\d*)\s*[,;\s]+\s*lon(?:gitude)?\s*[:=]?\s*(-?\d+\.?\d*)/i,
+        /\(?\s*(-?\d+\.?\d*)\s*(?:and|,|;|\s)+\s*(-?\d+\.?\d*)\s*\)?/i,
+      ];
+      for (const pattern of coordPatterns) {
+        const match = normalizedText.match(pattern);
+        if (match) {
+          if (match[2] && /[NSEW]/i.test(match[2])) {
+            extractedLat = parseFloat(match[1]);
+            if (/[Ss]/.test(match[2])) extractedLat = -extractedLat;
+            extractedLon = parseFloat(match[3]);
+            if (/[Ww]/.test(match[4])) extractedLon = -extractedLon;
+          } else {
+            const a = parseFloat(match[1]);
+            const b = parseFloat(match[2]);
+            if (Math.abs(a) <= 90 && Math.abs(b) <= 180) {
+              extractedLat = a;
+              extractedLon = b;
+            }
           }
+          if (extractedLat !== null) break;
         }
-        if (extractedLat !== null) break;
       }
     }
 
@@ -247,6 +306,21 @@ app.post('/ai/chat_context', async (req, res) => {
     }
 
 
+    // Retrieve OBIS Marine Biodiversity data
+    let obisSummary = '';
+    try {
+      const obisData = await fetchObisSpecies(latNum, lonNum, rangeNum, 35);
+      if (obisData && obisData.summaryText) {
+        obisSummary = obisData.summaryText;
+      }
+    } catch (err) {
+      console.error('[OBIS] Error in chat_context:', err.message);
+    }
+
+    if (obisSummary) {
+      preambleText += `\n[OBIS BIODIVERSITY CONTEXT]\n${obisSummary}\n`;
+    }
+
     if (retrievedDocsList.length > 0) {
       preambleText += `\n[REFERENCE CONTEXT]\n`;
       retrievedDocsList.forEach((passage, idx) => {
@@ -276,7 +350,7 @@ app.post('/ai/chat_context', async (req, res) => {
       messages: chatMessages,
       model: 'openai/gpt-oss-120b',
       temperature: 0.2,
-      max_tokens: 500
+      max_tokens: 2000
     });
 
     const text = completion.choices[0]?.message?.content || '';
@@ -319,39 +393,51 @@ app.post('/ai/chat', async (req, res) => {
     // Try to auto-extract lat/lon from the latest user message
     let extractedLat = null;
     let extractedLon = null;
+    let resolvedRangeDeg = 2; // default range
 
     // Normalize degree-like characters: °, ˚, º, and unicode variants
     const normalizedText = lastUserMessage.replace(/[°˚º]/g, ' ').replace(/\u200B/g, '');
 
-    // Match patterns like: "26 N, 66 W", "26N 66W", "lat 26 lon -66", etc.
-    const coordPatterns = [
-      // "26 N, 66 W" or "26N, 66W" or "26 N 66 W" — with optional degree symbol already stripped
-      /(-?\d+\.?\d*)\s*([NS])\s*[,;\s]+\s*(-?\d+\.?\d*)\s*([EW])/i,
-      // "lat 26, lon -66" or "latitude 26 longitude -66"
-      /lat(?:itude)?\s*[:=]?\s*(-?\d+\.?\d*)\s*[,;\s]+\s*lon(?:gitude)?\s*[:=]?\s*(-?\d+\.?\d*)/i,
-      // Bare coordinates like "26, -66" or "(26, -66)" or "26 and -66"
-      /\(?\s*(-?\d+\.?\d*)\s*(?:and|,|;|\s)+\s*(-?\d+\.?\d*)\s*\)?/i,
-    ];
+    // Check for named ocean region first
+    const namedRegion = resolveNamedRegion(lastUserMessage);
+    if (namedRegion) {
+      console.log(`[AUTO-EXTRACT] Resolved named region: ${namedRegion.name}`);
+      extractedLat = namedRegion.centerLat;
+      extractedLon = namedRegion.centerLon;
+      resolvedRangeDeg = namedRegion.rangeDeg;
+    }
 
-    for (const pattern of coordPatterns) {
-      const match = normalizedText.match(pattern);
-      if (match) {
-        if (match[2] && /[NSEW]/i.test(match[2])) {
-          // Pattern with N/S E/W directions
-          extractedLat = parseFloat(match[1]);
-          if (/[Ss]/.test(match[2])) extractedLat = -extractedLat;
-          extractedLon = parseFloat(match[3]);
-          if (/[Ww]/.test(match[4])) extractedLon = -extractedLon;
-        } else {
-          // Pattern with raw numbers — only use if they look like coordinates
-          const a = parseFloat(match[1]);
-          const b = parseFloat(match[2]);
-          if (Math.abs(a) <= 90 && Math.abs(b) <= 180) {
-            extractedLat = a;
-            extractedLon = b;
+    if (!namedRegion) {
+      // Match patterns like: "26 N, 66 W", "26N 66W", "lat 26 lon -66", etc.
+      const coordPatterns = [
+        // "26 N, 66 W" or "26N, 66W" or "26 N 66 W" — with optional degree symbol already stripped
+        /(-?\d+\.?\d*)\s*([NS])\s*[,;\s]+\s*(-?\d+\.?\d*)\s*([EW])/i,
+        // "lat 26, lon -66" or "latitude 26 longitude -66"
+        /lat(?:itude)?\s*[:=]?\s*(-?\d+\.?\d*)\s*[,;\s]+\s*lon(?:gitude)?\s*[:=]?\s*(-?\d+\.?\d*)/i,
+        // Bare coordinates like "26, -66" or "(26, -66)" or "26 and -66"
+        /\(?\s*(-?\d+\.?\d*)\s*(?:and|,|;|\s)+\s*(-?\d+\.?\d*)\s*\)?/i,
+      ];
+
+      for (const pattern of coordPatterns) {
+        const match = normalizedText.match(pattern);
+        if (match) {
+          if (match[2] && /[NSEW]/i.test(match[2])) {
+            // Pattern with N/S E/W directions
+            extractedLat = parseFloat(match[1]);
+            if (/[Ss]/.test(match[2])) extractedLat = -extractedLat;
+            extractedLon = parseFloat(match[3]);
+            if (/[Ww]/.test(match[4])) extractedLon = -extractedLon;
+          } else {
+            // Pattern with raw numbers — only use if they look like coordinates
+            const a = parseFloat(match[1]);
+            const b = parseFloat(match[2]);
+            if (Math.abs(a) <= 90 && Math.abs(b) <= 180) {
+              extractedLat = a;
+              extractedLon = b;
+            }
           }
+          if (extractedLat !== null) break;
         }
-        if (extractedLat !== null) break;
       }
     }
 
@@ -365,11 +451,11 @@ app.post('/ai/chat', async (req, res) => {
 
     // If we extracted coordinates, auto-query the database
     if (Number.isFinite(extractedLat) && Number.isFinite(extractedLon) &&
-        Math.abs(extractedLat) <= 90 && Math.abs(extractedLon) <= 180) {
+        Math.abs(extractedLat) <= 90) {
       console.log(`[AUTO-EXTRACT] Detected coordinates: Lat=${extractedLat}, Lon=${extractedLon}`);
       
       const dbLon = extractedLon < 0 ? extractedLon + 360 : extractedLon;
-      const rangeNum = 2;
+      const rangeNum = resolvedRangeDeg;
       const latMin = extractedLat - rangeNum;
       const latMax = extractedLat + rangeNum;
       const lonMin = dbLon - rangeNum;
@@ -439,6 +525,15 @@ app.post('/ai/chat', async (req, res) => {
       } else {
         preambleText += `[DATA CONTEXT]\n(No matching data found)\n`;
       }
+      // Retrieve OBIS Marine Biodiversity data for extracted region
+      try {
+        const obisData = await fetchObisSpecies(extractedLat, extractedLon, resolvedRangeDeg, 35);
+        if (obisData && obisData.summaryText) {
+          preambleText += `\n[OBIS BIODIVERSITY CONTEXT]\n${obisData.summaryText}\n`;
+        }
+      } catch (err) {
+        console.error('[OBIS] Error in /ai/chat:', err.message);
+      }
     } else {
       preambleText += `[DATA CONTEXT]\n(No coordinates detected in the user's message and no region selected on the map.)\n`;
     }
@@ -469,7 +564,7 @@ app.post('/ai/chat', async (req, res) => {
       messages: chatMessages,
       model: 'openai/gpt-oss-120b',
       temperature: 0.2,
-      max_tokens: 500
+      max_tokens: 2000
     });
 
     const text = completion.choices[0]?.message?.content || '';
@@ -491,6 +586,81 @@ app.post('/ai/chat', async (req, res) => {
     console.error('Chat handler failed:', err);
 
     res.status(500).json({ error: 'An error occurred while communicating with the Groq AI service.' });
+  }
+});
+
+// ── Compare endpoint: fetch profile data for multiple locations ──────────────
+// Body: { locations: [{ lat, lon, label }, ...] }
+app.post('/compare', async (req, res) => {
+  try {
+    const { locations = [] } = req.body || {};
+    if (!Array.isArray(locations) || locations.length === 0) {
+      return res.status(400).json({ error: 'locations array is required' });
+    }
+    if (locations.length > 6) {
+      return res.status(400).json({ error: 'Maximum 6 locations allowed for comparison' });
+    }
+
+    const results = await Promise.all(locations.map(async (loc) => {
+      const latNum = parseFloat(loc.lat);
+      const lonNum = parseFloat(loc.lon);
+      const rangeDeg = parseFloat(loc.rangeDeg) || 2;
+
+      if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
+        return { label: loc.label || 'Unknown', lat: latNum, lon: lonNum, records: [], error: 'Invalid coordinates' };
+      }
+
+      const dbLon = lonNum < 0 ? lonNum + 360 : lonNum;
+      const latMin = latNum - rangeDeg;
+      const latMax = latNum + rangeDeg;
+      const lonMin = dbLon - rangeDeg;
+      const lonMax = dbLon + rangeDeg;
+
+      try {
+        const result = await client.query(
+          `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
+           FROM t1
+           WHERE latitude BETWEEN $1 AND $2
+             AND longitude BETWEEN $3 AND $4
+             AND depth IS NOT NULL
+           ORDER BY depth ASC
+           LIMIT 2000`,
+          [latMin, latMax, lonMin, lonMax]
+        );
+        const records = (result.rows || []).map(normalizeMetrics);
+
+        // If no direct data, fall back to nearest
+        if (records.length === 0) {
+          const fallback = await client.query(
+            `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
+             FROM t1
+             WHERE (temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL)
+             ORDER BY ((latitude - $1)^2 + (longitude - $2)^2) ASC
+             LIMIT 500`,
+            [latNum, dbLon]
+          );
+          return {
+            label: loc.label || `${latNum.toFixed(1)}, ${lonNum.toFixed(1)}`,
+            lat: latNum, lon: lonNum,
+            records: (fallback.rows || []).map(normalizeMetrics),
+            isFallback: true
+          };
+        }
+
+        return {
+          label: loc.label || `${latNum.toFixed(1)}, ${lonNum.toFixed(1)}`,
+          lat: latNum, lon: lonNum,
+          records
+        };
+      } catch (e) {
+        return { label: loc.label || 'Error', lat: latNum, lon: lonNum, records: [], error: e.message };
+      }
+    }));
+
+    res.json({ locations: results });
+  } catch (err) {
+    console.error('Compare endpoint failed:', err);
+    res.status(500).json({ error: 'Failed to compare locations.' });
   }
 });
 
@@ -650,6 +820,25 @@ app.get("/time", async (req, res) => {
   } catch (err) {
     console.error('Database query error in /time:', err);
     res.status(500).json({ error: 'Failed to retrieve timeseries metadata.' });
+  }
+});
+
+app.get("/api/obis/species", async (req, res) => {
+  try {
+    const lat = parseFloat(req.query.lat);
+    const lon = parseFloat(req.query.lon);
+    const rangeDeg = parseFloat(req.query.rangeDeg) || 5;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return res.status(400).json({ error: "lat and lon query parameters are required" });
+    }
+    const obisData = await fetchObisSpecies(lat, lon, rangeDeg);
+    if (!obisData) {
+      return res.status(500).json({ error: "Failed to fetch OBIS biodiversity data" });
+    }
+    res.json(obisData);
+  } catch (err) {
+    console.error("OBIS API error:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 

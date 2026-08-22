@@ -1,7 +1,63 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, ChevronDown, ChevronUp, Bot, MapPin, Sparkles } from "lucide-react";
+import { X, Send, ChevronDown, ChevronUp, Bot, MapPin, Sparkles, GitCompare } from "lucide-react";
 import { API_BASE } from '../config';
+
+// Named ocean regions for client-side detection
+const OCEAN_REGION_MAP = {
+    'indian ocean':      { lat: -20,  lon:  80,  rangeDeg: 40 },
+    'pacific ocean':     { lat:   0,  lon: 180,  rangeDeg: 60 },
+    'north pacific':     { lat:  30,  lon: 180,  rangeDeg: 35 },
+    'south pacific':     { lat: -30,  lon: 200,  rangeDeg: 35 },
+    'atlantic ocean':    { lat:   0,  lon: -30,  rangeDeg: 50 },
+    'north atlantic':    { lat:  40,  lon: -35,  rangeDeg: 30 },
+    'south atlantic':    { lat: -30,  lon: -20,  rangeDeg: 30 },
+    'arctic ocean':      { lat:  85,  lon:   0,  rangeDeg: 15 },
+    'southern ocean':    { lat: -65,  lon:   0,  rangeDeg: 20 },
+    'antarctic ocean':   { lat: -65,  lon:   0,  rangeDeg: 20 },
+    'arabian sea':       { lat:  15,  lon:  65,  rangeDeg: 12 },
+    'bay of bengal':     { lat:  13,  lon:  88,  rangeDeg: 10 },
+    'mediterranean':     { lat:  36,  lon:  18,  rangeDeg: 12 },
+    'mediterranean sea': { lat:  36,  lon:  18,  rangeDeg: 12 },
+    'caribbean sea':     { lat:  15,  lon: -75,  rangeDeg: 10 },
+    'caribbean':         { lat:  15,  lon: -75,  rangeDeg: 10 },
+    'red sea':           { lat:  20,  lon:  38,  rangeDeg:  6 },
+    'gulf of mexico':    { lat:  25,  lon: -90,  rangeDeg:  8 },
+    'south china sea':   { lat:  12,  lon: 114,  rangeDeg: 10 },
+    'coral sea':         { lat: -18,  lon: 154,  rangeDeg: 10 },
+    'tasman sea':        { lat: -38,  lon: 160,  rangeDeg:  8 },
+    'bering sea':        { lat:  58,  lon: 180,  rangeDeg: 10 },
+    'north sea':         { lat:  57,  lon:   4,  rangeDeg:  6 },
+    'persian gulf':      { lat:  26,  lon:  52,  rangeDeg:  4 },
+};
+
+/**
+ * Extract all named regions from a message text.
+ * Returns array of { label, lat, lon, rangeDeg }
+ */
+function extractAllNamedRegions(text) {
+    const lower = text.toLowerCase();
+    const found = [];
+    const keys = Object.keys(OCEAN_REGION_MAP).sort((a, b) => b.length - a.length);
+    const usedRanges = [];
+
+    for (const key of keys) {
+        const idx = lower.indexOf(key);
+        if (idx === -1) continue;
+        // Avoid overlapping matches
+        const overlaps = usedRanges.some(([s, e]) => idx < e && idx + key.length > s);
+        if (overlaps) continue;
+        usedRanges.push([idx, idx + key.length]);
+        const region = OCEAN_REGION_MAP[key];
+        found.push({
+            label: key.replace(/\b\w/g, c => c.toUpperCase()),
+            lat: region.lat,
+            lon: region.lon,
+            rangeDeg: region.rangeDeg,
+        });
+    }
+    return found;
+}
 
 /* ─── Typing animation ─── */
 function TypingDots() {
@@ -72,8 +128,8 @@ function MessageBubble({ message }) {
 }
 
 /* ─── Chatbot panel ─── */
-export default function Chatbot({ chatOpen, setChatOpen, selectedCoords, onDataVisualized }) {
-    const CONCISE_INSTRUCTIONS = "You are floatCHAT. Answer very concisely (1–2 sentences). Use ARGO data when provided. Include numbers with units. If uncertain, say so briefly.";
+export default function Chatbot({ chatOpen, setChatOpen, selectedCoords, onDataVisualized, onCompareLocations }) {
+    const SYSTEM_INSTRUCTIONS = "You are floatCHAT. Provide structured, informative answers with data summaries, oceanographic context, and relevant marine life/vegetation insights. Use clear subheadings and bullet points.";
 
     const [messages, setMessages] = useState([
         { id: 1, role: 'assistant', content: "Hi! I'm floatCHAT — your ocean data assistant. Ask me about ARGO floats, temperature, salinity, or any oceanographic data." }
@@ -106,8 +162,9 @@ export default function Chatbot({ chatOpen, setChatOpen, selectedCoords, onDataV
 
     const suggestedPrompts = [
         "What is the average ocean temperature?",
-        "Explain ARGO floats",
-        "Show salinity trends",
+        "Compare Indian Ocean vs Atlantic Ocean",
+        "Arabian Sea salinity data",
+        "Explain thermocline",
     ];
 
     async function sendMessage(text) {
@@ -118,9 +175,17 @@ export default function Chatbot({ chatOpen, setChatOpen, selectedCoords, onDataV
         const userMsg = { id: Date.now(), role: 'user', content: text };
         setMessages(prev => [...prev, userMsg]);
         setLoading(true);
+
+        // ── Detect multiple named regions for comparison ──
+        const detectedRegions = extractAllNamedRegions(text);
+        const isComparison = detectedRegions.length >= 2;
+        if (isComparison && onCompareLocations) {
+            onCompareLocations(detectedRegions);
+        }
+
         try {
             const endpoint = hasContext ? `${API_BASE}/ai/chat_context` : `${API_BASE}/ai/chat`;
-            const baseMsgs = [{ role: 'user', content: CONCISE_INSTRUCTIONS }, ...messages, userMsg];
+            const baseMsgs = [{ role: 'user', content: SYSTEM_INSTRUCTIONS }, ...messages, userMsg];
             const payload = hasContext
                 ? { messages: baseMsgs.map(m => ({ role: m.role, content: m.content })), lat: parseFloat(lat), lon: parseFloat(lon), rangeDeg: parseFloat(rangeDeg) }
                 : { messages: baseMsgs.map(m => ({ role: m.role, content: m.content })) };
@@ -135,8 +200,8 @@ export default function Chatbot({ chatOpen, setChatOpen, selectedCoords, onDataV
             const reply = (data?.text || '').trim() || "I'm not sure how to answer that yet.";
             setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: reply }]);
 
-            // If the backend auto-extracted coordinates from the user's message, trigger the visualization panel
-            if (data?.extractedCoords && onDataVisualized) {
+            // If single location query (not comparison), trigger visualization panel for extracted coords
+            if (!isComparison && data?.extractedCoords && onDataVisualized) {
                 onDataVisualized(data.extractedCoords.lat, data.extractedCoords.lon);
             }
         } catch (e) {
@@ -215,6 +280,14 @@ export default function Chatbot({ chatOpen, setChatOpen, selectedCoords, onDataV
                             >
                                 <Sparkles size={10} style={{ color: '#00d4ff' }} />
                                 <span className="text-[10px] font-semibold" style={{ color: '#00d4ff' }}>AI</span>
+                            </div>
+                            <div
+                                title="Compare locations: mention 2+ ocean regions"
+                                className="flex items-center gap-1 px-2 py-1 rounded-full cursor-default"
+                                style={{ background: 'rgba(153,51,255,0.08)', border: '1px solid rgba(153,51,255,0.18)' }}
+                            >
+                                <GitCompare size={10} style={{ color: '#9933ff' }} />
+                                <span className="text-[10px] font-semibold" style={{ color: '#9933ff' }}>Compare</span>
                             </div>
                             <button
                                 className="w-7 h-7 flex items-center justify-center rounded-lg transition-all"
