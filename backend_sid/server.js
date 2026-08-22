@@ -225,7 +225,7 @@ app.get("/latlong", async (req, res) => {
 app.get("/temperature", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, temperature FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, temperature FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -237,7 +237,7 @@ app.get("/temperature", async (req, res) => {
 app.get("/pressure", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, pressure FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND pressure IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, pressure FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND pressure IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -249,7 +249,7 @@ app.get("/pressure", async (req, res) => {
 app.get("/salinity", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, salinity FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, salinity FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -261,7 +261,7 @@ app.get("/salinity", async (req, res) => {
 app.get("/oxygen", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, oxygen FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, oxygen FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -273,7 +273,7 @@ app.get("/oxygen", async (req, res) => {
 app.get("/nitrate", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, nitrate FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND nitrate IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, nitrate FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND nitrate IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     // Nitrate is left as-is; no normalization to 0 requested
     res.json(result.rows);
@@ -285,7 +285,7 @@ app.get("/nitrate", async (req, res) => {
 app.get("/depth", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, depth FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, depth FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -331,7 +331,7 @@ app.get("/profiles", async (req, res) => {
 app.get("/time", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, time_ts FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, time_ts FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     res.json(result.rows);
   } catch (err) {
