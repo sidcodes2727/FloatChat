@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { Play, Pause } from 'lucide-react';
 import Map from 'react-map-gl/maplibre';
 import DeckGL from '@deck.gl/react';
 import { ScatterplotLayer, GeoJsonLayer } from '@deck.gl/layers';
@@ -74,6 +75,11 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
   const [hoverInfo, setHoverInfo] = useState(null); // {x,y,coordinate,object}
   const [land, setLand] = useState(null); // Natural Earth land polygons
 
+  // Time Series State
+  const [timeRange, setTimeRange] = useState(null);
+  const [currentTime, setCurrentTime] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
   useEffect(() => {
     async function load() {
       try {
@@ -82,9 +88,19 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
         const data = await res.json();
         const cleaned = (Array.isArray(data) ? data : []).filter(
           d => d.latitude != null && d.longitude != null && Math.abs(d.latitude) <= 90 && Math.abs(d.longitude) <= 360
-        );
+        ).map(d => ({
+          ...d,
+          parsedTime: d.time_ts ? new Date(d.time_ts).getTime() : 0
+        }));
         setRows(cleaned);
         if (cleaned.length) {
+          const times = cleaned.map(d => d.parsedTime).filter(t => t > 0);
+          if (times.length > 0) {
+            const min = Math.min(...times);
+            const max = Math.max(...times);
+            setTimeRange([min, max]);
+            setCurrentTime(max);
+          }
           const avgLat = cleaned.reduce((s, d) => s + Number(d.latitude), 0) / cleaned.length;
           const avgLon = cleaned.reduce((s, d) => s + (Number(d.longitude) > 180 ? Number(d.longitude) - 360 : Number(d.longitude)), 0) / cleaned.length;
           setViewState(v => ({ ...v, latitude: avgLat, longitude: avgLon, zoom: 3 }));
@@ -110,6 +126,38 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
     loadLand();
     return () => { cancelled = true; };
   }, []);
+
+  const filteredRows = useMemo(() => {
+    if (!currentTime || !timeRange) return rows;
+    // 1 year time window (in milliseconds) so older points fade away
+    const TIME_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
+    return rows.filter(r => r.parsedTime <= currentTime && r.parsedTime > (currentTime - TIME_WINDOW_MS));
+  }, [rows, currentTime, timeRange]);
+
+  useEffect(() => {
+    let animationFrame;
+    if (isPlaying && timeRange) {
+      let lastTime = Date.now();
+      const animate = () => {
+        const now = Date.now();
+        const dt = now - lastTime;
+        lastTime = now;
+        
+        // Advance by ~5% of the total time range every second
+        const totalDuration = timeRange[1] - timeRange[0];
+        const step = totalDuration * 0.05 * (dt / 1000); 
+        
+        setCurrentTime(prev => {
+          let next = prev + step;
+          if (next > timeRange[1]) next = timeRange[0]; // loop back to start
+          return next;
+        });
+        animationFrame = requestAnimationFrame(animate);
+      };
+      animationFrame = requestAnimationFrame(animate);
+    }
+    return () => cancelAnimationFrame(animationFrame);
+  }, [isPlaying, timeRange]);
 
   // Build a robust 6-stop RGBA color range for the heatmap
   const heatColors = useMemo(() => {
@@ -164,7 +212,7 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
   // Heatmap layer for continuous surface
   const heatmapLayer = useMemo(() => new HeatmapLayer({
     id: `${metric}-heat`,
-    data: rows,
+    data: filteredRows,
     getPosition: (d) => [Number(d.longitude) > 180 ? Number(d.longitude) - 360 : Number(d.longitude), Number(d.latitude)],
     getWeight: (d) => {
       const raw = d[metric] ?? d.value;
@@ -179,12 +227,12 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
     threshold: 0.05,
     colorRange: metric === 'salinity' ? SALINITY_RANGE : metric === 'pressure' ? PRESSURE_RANGE : TEMP_RANGE,
     weightsTextureSize: 512,
-  }), [rows, metric, viewState, TEMP_RANGE, SALINITY_RANGE, PRESSURE_RANGE]);
+  }), [filteredRows, metric, viewState, TEMP_RANGE, SALINITY_RANGE, PRESSURE_RANGE]);
 
   // Black dot markers for actual coordinates
   const pointsLayer = useMemo(() => new ScatterplotLayer({
     id: `${metric}-points`,
-    data: rows,
+    data: filteredRows,
     pickable: true,
     opacity: 0.95,
     radiusScale: 10,
@@ -209,7 +257,7 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
          onMapClick(info.coordinate[1], info.coordinate[0]);
       }
     },
-  }), [rows, metric, onMapClick]);
+  }), [filteredRows, metric, onMapClick]);
 
   // Land mask layer (overdraw on top to hide heat on land)
   const landMask = useMemo(() => {
@@ -268,6 +316,37 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
       >
         <Map mapLib={maplibregl} reuseMaps mapStyle={MAP_STYLE} attributionControl={false} {...viewState} />
       </DeckGL>
+      {/* Time Slider UI */}
+      {timeRange && (
+        <div 
+          style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', width: '80%', maxWidth: 600, zIndex: 10 }}
+          className="glass-subtle rounded-xl p-3 px-5 flex flex-col gap-2 shadow-2xl"
+        >
+          <div className="flex justify-between items-center px-1">
+             <button 
+                onClick={() => setIsPlaying(!isPlaying)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+             >
+                {isPlaying ? <Pause size={14} className="text-white" /> : <Play size={14} className="ml-0.5 text-white" />}
+             </button>
+             <div className="text-white/90 font-mono text-sm tracking-wider font-semibold">
+                {new Date(currentTime).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+             </div>
+          </div>
+          <input 
+             type="range" 
+             min={timeRange[0]} 
+             max={timeRange[1]} 
+             value={currentTime} 
+             onChange={(e) => { setCurrentTime(Number(e.target.value)); setIsPlaying(false); }}
+             className="w-full h-1.5 bg-white/20 rounded-full appearance-none outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer"
+             style={{
+                accentColor: '#00d4ff'
+             }}
+          />
+        </div>
+      )}
+
       {/* Color Legend */}
       <div
         style={{ position: 'absolute', left: 12, bottom: 12, width: 240 }}
