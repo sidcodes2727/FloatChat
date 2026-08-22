@@ -1,0 +1,42 @@
+[
+  {
+    "id": "argo_mission",
+    "keywords": ["argo", "float", "mission", "program", "satellite", "gps", "transmission", "cycle"],
+    "text": "The Argo program is a global array of nearly 4,000 robotic profiling floats measuring ocean temperature, salinity, and biogeochemical parameters. Each float operates on a autonomous 10-day cycle: it descends to a drift depth of about 1,000 meters to drift with ocean currents, then drops further to 2,000 meters before ascending to the surface. During ascent, sensors record vertical profiles. At the surface, data is transmitted to shore via satellite (such as Iridium or Argos) and GPS coordinates are logged."
+  },
+  {
+    "id": "thermocline",
+    "keywords": ["thermocline", "temperature", "gradient", "transition", "depth", "layer", "stratification"],
+    "text": "A thermocline is a distinct thin layer in a large body of fluid (such as the ocean) in which temperature changes more rapidly with depth than it does in the layers above or below. In the ocean, the thermocline separates the warm, well-mixed surface layer from the cold, deep abyssal waters. Thermoclines can be seasonal, changing with surface heating, or permanent in tropical and subtropical regions where warm surface waters sit atop deep cold pools."
+  },
+  {
+    "id": "halocline",
+    "keywords": ["halocline", "salinity", "gradient", "transition", "depth", "layer", "salt"],
+    "text": "A halocline is a strong vertical salinity gradient within a body of water. Because salinity affects seawater density, it plays a key role in vertical stratification and ocean circulation. Haloclines are particularly pronounced in high-latitude oceans where cold, relatively fresh water sits on top of saltier, denser ocean water, and in regions with high rainfall or river runoff."
+  },
+  {
+    "id": "pycnocline",
+    "keywords": ["pycnocline", "density", "gradient", "transition", "depth", "layer", "stratification"],
+    "text": "A pycnocline is the layer in a body of water where density increases rapidly with depth. It is primarily driven by changes in temperature (thermocline) and salinity (halocline). The pycnocline acts as a major barrier to vertical mixing, separating the upper ocean from the deep ocean and limiting the upward transport of nutrients and downward transport of heat and dissolved gases."
+  },
+  {
+    "id": "salinity_measurement",
+    "keywords": ["salinity", "measure", "measurement", "conductivity", "pss", "practical salinity", "sensor"],
+    "text": "Salinity in ARGO floats is measured indirectly using conductivity, temperature, and pressure sensors (CTD). Seawater conductivty increases proportionally with salt concentration. By measuring conductivity and temperature under pressure, salinity is calculated using the Practical Salinity Scale (PSS-78), expressed in practical salinity units (PSU) or as a dimensionless ratio."
+  },
+  {
+    "id": "oxygen_measurement",
+    "keywords": ["oxygen", "dissolved", "measure", "measurement", "sensor", "optode", "circulation", "hypoxic", "respiration"],
+    "text": "Dissolved oxygen is measured by biogeochemical (BGC) ARGO floats using lifetime-based oxygen optodes or electrochemical sensors. Dissolved oxygen is vital for marine life and serves as a key tracer for ocean circulation and ventilation. Decreases in dissolved oxygen indicate biological consumption (respiration) or warming water which holds less gas, occasionally leading to hypoxic or dead zones."
+  },
+  {
+    "id": "nitrate_measurement",
+    "keywords": ["nitrate", "nutrient", "biogeochemical", "bgc", "sensor", "optics", "uv", "photosynthesis"],
+    "text": "Nitrate (NO3) is a major limiting nutrient required for phytoplankton photosynthesis. BGC-Argo floats measure nitrate concentration in situ using ultraviolet (UV) optical spectrophotometers (like the ISUS or SUNA sensors) by detecting nitrate's characteristic absorption spectrum in the UV range. Vertical profiles of nitrate help researchers understand primary productivity and nutrient cycling."
+  },
+  {
+    "id": "temperature_sensor",
+    "keywords": ["temperature", "measure", "sensor", "thermistor", "accuracy", "ctd"],
+    "text": "Ocean temperature is measured by ARGO floats using high-precision platinum resistance thermistors mounted on the CTD sensor head. These thermistors can measure temperature with an accuracy of up to 0.002 degrees Celsius, allowing scientists to detect subtle, long-term warming trends in the deep ocean."
+  }
+]

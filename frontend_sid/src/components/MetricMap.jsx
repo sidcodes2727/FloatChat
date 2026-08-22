@@ -67,7 +67,7 @@ function toRgb(c) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-export default function MetricMap({ metric = 'salinity' }) {
+export default function MetricMap({ metric = 'salinity', onPointClick }) {
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
   const [rows, setRows] = useState([]);
   const [error, setError] = useState(null);
@@ -204,7 +204,13 @@ export default function MetricMap({ metric = 'salinity' }) {
       }
       setHoverInfo({ x: info.x, y: info.y, coordinate: info.coordinate, object: info.object });
     },
-  }), [rows, metric]);
+    onClick: (info) => {
+      if (info && info.object && onPointClick) {
+        const displayLon = Number(info.object.longitude) > 180 ? Number(info.object.longitude) - 360 : Number(info.object.longitude);
+        onPointClick(Number(info.object.latitude), displayLon);
+      }
+    },
+  }), [rows, metric, onPointClick]);
 
   // Land mask layer (overdraw on top to hide heat on land)
   const landMask = useMemo(() => {

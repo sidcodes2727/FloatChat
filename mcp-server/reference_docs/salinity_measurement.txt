@@ -1,0 +1,1 @@
+Salinity in ARGO floats is measured indirectly using conductivity, temperature, and pressure sensors (CTD). Seawater conductivty increases proportionally with salt concentration. By measuring conductivity and temperature under pressure, salinity is calculated using the Practical Salinity Scale (PSS-78), expressed in practical salinity units (PSU) or as a dimensionless ratio.

@@ -1,0 +1,1 @@
+A pycnocline is the layer in a body of water where density increases rapidly with depth. It is primarily driven by changes in temperature (thermocline) and salinity (halocline). The pycnocline acts as a major barrier to vertical mixing, separating the upper ocean from the deep ocean and limiting the upward transport of nutrients and downward transport of heat and dissolved gases.

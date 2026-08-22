@@ -24,7 +24,7 @@ const fallbackData = [
   { id: 3, depth: 15, pressure: 7, temperature: 30, latitude: 22.6, longitude: 88.4 },
 ];
 
-export default function OceanMap({ setActivePage }) {
+export default function OceanMap({ setActivePage, onPointClick }) {
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
   const [data, setData] = useState([]);
   const [hoverInfo, setHoverInfo] = useState(null); // {x,y,coordinate,object}
@@ -115,6 +115,11 @@ export default function OceanMap({ setActivePage }) {
           return;
         }
         setHoverInfo({ x: info.x, y: info.y, coordinate: info.coordinate, object: info.object });
+      },
+      onClick: (info) => {
+        if (info && info.object && onPointClick) {
+          onPointClick(info.object.latitude, info.object.longitude);
+        }
       },
     }),
   ];

@@ -1,0 +1,1 @@
+Ocean temperature is measured by ARGO floats using high-precision platinum resistance thermistors mounted on the CTD sensor head. These thermistors can measure temperature with an accuracy of up to 0.002 degrees Celsius, allowing scientists to detect subtle, long-term warming trends in the deep ocean.

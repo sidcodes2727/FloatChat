@@ -72,7 +72,7 @@ function MessageBubble({ message }) {
 }
 
 /* ─── Chatbot panel ─── */
-function Chatbot({ chatOpen, setChatOpen }) {
+function Chatbot({ chatOpen, setChatOpen, selectedCoords }) {
     const CONCISE_INSTRUCTIONS = "You are floatCHAT. Answer very concisely (1–2 sentences). Use ARGO data when provided. Include numbers with units. If uncertain, say so briefly.";
 
     const [messages, setMessages] = useState([
@@ -93,6 +93,16 @@ function Chatbot({ chatOpen, setChatOpen }) {
         if (!listRef.current) return;
         listRef.current.scrollTop = listRef.current.scrollHeight;
     }, [messages, chatOpen]);
+
+    // Auto-populate location when map point is clicked
+    useEffect(() => {
+        if (selectedCoords) {
+            setLat(String(selectedCoords.lat));
+            setLon(String(selectedCoords.lon));
+            if (!rangeDeg || rangeDeg === '') setRangeDeg('2');
+            setContextOpen(true);
+        }
+    }, [selectedCoords]);
 
     const suggestedPrompts = [
         "What is the average ocean temperature?",
@@ -121,9 +131,7 @@ function Chatbot({ chatOpen, setChatOpen }) {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error || 'Failed to get response');
-            const raw = (data?.text || '').trim() || "I'm not sure how to answer that yet.";
-            const sentences = raw.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
-            const reply = sentences.length > 0 ? sentences.slice(0, 160) : raw.slice(0, 160);
+            const reply = (data?.text || '').trim() || "I'm not sure how to answer that yet.";
             setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: reply }]);
         } catch (e) {
             setError(e.message || 'Something went wrong');

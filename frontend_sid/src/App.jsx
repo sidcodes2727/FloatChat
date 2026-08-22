@@ -12,6 +12,7 @@ import { Bot, X } from 'lucide-react';
 function OceanVizApp() {
     const [chatOpen, setChatOpen] = useState(false);
     const [activePage, setActivePage] = useState('Home');
+    const [selectedCoords, setSelectedCoords] = useState(null); // { lat, lon } from map click
 
     const isFullScreenMap = ['Argo Floats', 'Salinity', 'Temperature', 'Pressure', '3D Globe'].includes(activePage);
 
@@ -41,10 +42,10 @@ function OceanVizApp() {
                         </div>
                     )}
                     {activePage === 'Home' && <Home setActivePage={setActivePage} setChatOpen={setChatOpen} />}
-                    {activePage === 'Argo Floats' && <OceanMap setActivePage={setActivePage} />}
-                    {activePage === 'Salinity' && <MetricMap metric="salinity" />}
-                    {activePage === 'Temperature' && <MetricMap metric="temperature" />}
-                    {activePage === 'Pressure' && <MetricMap metric="pressure" />}
+                    {activePage === 'Argo Floats' && <OceanMap setActivePage={setActivePage} onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setChatOpen(true); }} />}
+                    {activePage === 'Salinity' && <MetricMap metric="salinity" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setChatOpen(true); }} />}
+                    {activePage === 'Temperature' && <MetricMap metric="temperature" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setChatOpen(true); }} />}
+                    {activePage === 'Pressure' && <MetricMap metric="pressure" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setChatOpen(true); }} />}
                     {activePage === '3D Globe' && <GlobeMap />}
                 </motion.div>
             </AnimatePresence>
@@ -108,7 +109,7 @@ function OceanVizApp() {
                 </AnimatePresence>
             </motion.button>
 
-            <Chatbot chatOpen={chatOpen} setChatOpen={setChatOpen} />
+            <Chatbot chatOpen={chatOpen} setChatOpen={setChatOpen} selectedCoords={selectedCoords} />
         </div>
     );
 }
