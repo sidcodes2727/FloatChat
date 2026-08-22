@@ -42,12 +42,13 @@ app.post('/ai/chat', async (req, res) => {
     // Step 1: Extract intent and location from the last user message
     const lastUserMsg = messages.filter(m => m.role === 'user').pop();
     let extractedLocs = [];
+    let wantsData = true; // Default to true
 
     if (lastUserMsg) {
-      const extractPrompt = `Extract all locations mentioned in the text.
+      const extractPrompt = `Extract all locations mentioned in the text. Also determine if the user is asking for oceanographic data, statistics, measurements, or charts (set "wants_data" to true). If they are asking general questions (e.g. aquatic life, fishes, history) set "wants_data" to false.
 If explicit latitude and longitude are provided, extract them as "lat" and "lon" (numbers).
 If a region or place name is provided, extract it as "location_name".
-Return ONLY a JSON object in this format: {"locations": [{"location_name": string | null, "lat": number | null, "lon": number | null, "rangeDeg": number | null}]}. If no location is found, return {"locations": []}.
+Return ONLY a JSON object in this format: {"locations": [{"location_name": string | null, "lat": number | null, "lon": number | null, "rangeDeg": number | null}], "wants_data": boolean}. If no location is found, return {"locations": [], "wants_data": false}.
 
 Text: "${lastUserMsg.content}"`;
 
@@ -66,10 +67,16 @@ Text: "${lastUserMsg.content}"`;
         const extractData = await extractResp.json();
         try {
           const parsed = JSON.parse(extractData.choices[0].message.content);
-          if (parsed.locations && Array.isArray(parsed.locations)) {
-             extractedLocs = parsed.locations;
-          } else if (parsed.location_name || parsed.lat !== null) {
-             extractedLocs = [parsed];
+          if (parsed.wants_data !== undefined) {
+             wantsData = parsed.wants_data;
+          }
+          // Only process locations if they actually want data
+          if (wantsData) {
+            if (parsed.locations && Array.isArray(parsed.locations)) {
+               extractedLocs = parsed.locations;
+            } else if (parsed.location_name || parsed.lat !== null) {
+               extractedLocs = [parsed];
+            }
           }
         } catch(e) {
           console.error("Failed to parse JSON from Groq", e);
@@ -154,11 +161,11 @@ Text: "${lastUserMsg.content}"`;
     }
 
     // Step 4: Final Chat Generation
-    let systemPrompt = "You are floatCHAT — your ocean data assistant. Answer very concisely (1-2 sentences). Use ARGO data when provided. Include numbers with units. If uncertain, say so briefly.";
+    let systemPrompt = "You are floatCHAT — your ocean data assistant. Answer very concisely (1-2 sentences). CRITICAL RULE: NEVER mention or include ARGO temperature, salinity, oxygen, or depth statistics in your answer unless the user EXPLICITLY asks for oceanographic data, measurements, or stats. If the user asks about aquatic life, fishes, animals, geography, or history, DO NOT append any ARGO data or numbers to your response. Answer naturally without stats.";
     if (summaries.length > 0) {
       // Strip raw points so we don't blow up the LLM token limit
       const llmContext = summaries.map(({ points, ...rest }) => rest);
-      systemPrompt += `\n\nYou are provided ARGO float data context. Use it to answer concisely. Context JSON:\n${JSON.stringify(llmContext)}`;
+      systemPrompt += `\n\nContext JSON (ONLY use this if the user specifically asks for data/stats. Otherwise, IGNORE it completely):\n${JSON.stringify(llmContext)}`;
     } else if (extractedLocs.length > 0) {
       const locNames = extractedLocs.map(l => l.location_name).filter(Boolean).join(", ");
       systemPrompt += `\n\nNo ocean data was found for the requested locations: ${locNames || 'coordinates provided'}.`;
