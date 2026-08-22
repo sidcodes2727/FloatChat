@@ -95,10 +95,10 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
   const [hoverInfo, setHoverInfo] = useState(null); // {x,y,coordinate,object}
   const [land, setLand] = useState(null); // Natural Earth land polygons
 
-  // Time Series State
-  const [timeRange, setTimeRange] = useState(null);
-  const [currentTime, setCurrentTime] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  // Time Filter State
+  const [selectedYear, setSelectedYear] = useState('All');
+  const [selectedMonth, setSelectedMonth] = useState('All');
+  const [selectedDay, setSelectedDay] = useState('All');
 
   useEffect(() => {
     async function load() {
@@ -114,13 +114,6 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
         }));
         setRows(cleaned);
         if (cleaned.length) {
-          const times = cleaned.map(d => d.parsedTime).filter(t => t > 0);
-          if (times.length > 0) {
-            const min = Math.min(...times);
-            const max = Math.max(...times);
-            setTimeRange([min, max]);
-            setCurrentTime(max);
-          }
           const avgLat = cleaned.reduce((s, d) => s + Number(d.latitude), 0) / cleaned.length;
           const avgLon = cleaned.reduce((s, d) => s + (Number(d.longitude) > 180 ? Number(d.longitude) - 360 : Number(d.longitude)), 0) / cleaned.length;
           setViewState(v => ({ ...v, latitude: avgLat, longitude: avgLon, zoom: 3 }));
@@ -147,37 +140,33 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
     return () => { cancelled = true; };
   }, []);
 
-  const filteredRows = useMemo(() => {
-    if (!currentTime || !timeRange) return rows;
-    // 1 year time window (in milliseconds) so older points fade away
-    const TIME_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
-    return rows.filter(r => r.parsedTime <= currentTime && r.parsedTime > (currentTime - TIME_WINDOW_MS));
-  }, [rows, currentTime, timeRange]);
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    rows.forEach(r => {
+      if (r.parsedTime) {
+        years.add(new Date(r.parsedTime).getFullYear());
+      }
+    });
+    return Array.from(years).sort((a, b) => b - a); // descending
+  }, [rows]);
 
+  // Set default year to the most recent year if not 'All'
   useEffect(() => {
-    let animationFrame;
-    if (isPlaying && timeRange) {
-      let lastTime = Date.now();
-      const animate = () => {
-        const now = Date.now();
-        const dt = now - lastTime;
-        lastTime = now;
-        
-        // Advance by ~5% of the total time range every second
-        const totalDuration = timeRange[1] - timeRange[0];
-        const step = totalDuration * 0.05 * (dt / 1000); 
-        
-        setCurrentTime(prev => {
-          let next = prev + step;
-          if (next > timeRange[1]) next = timeRange[0]; // loop back to start
-          return next;
-        });
-        animationFrame = requestAnimationFrame(animate);
-      };
-      animationFrame = requestAnimationFrame(animate);
+    if (availableYears.length > 0 && selectedYear === 'All') {
+      setSelectedYear(availableYears[0].toString());
     }
-    return () => cancelAnimationFrame(animationFrame);
-  }, [isPlaying, timeRange]);
+  }, [availableYears, selectedYear]);
+
+  const filteredRows = useMemo(() => {
+    return rows.filter(r => {
+      if (!r.parsedTime) return false;
+      const d = new Date(r.parsedTime);
+      if (selectedYear !== 'All' && d.getFullYear().toString() !== selectedYear.toString()) return false;
+      if (selectedMonth !== 'All' && (d.getMonth() + 1).toString() !== selectedMonth.toString()) return false;
+      if (selectedDay !== 'All' && d.getDate().toString() !== selectedDay.toString()) return false;
+      return true;
+    });
+  }, [rows, selectedYear, selectedMonth, selectedDay]);
 
   // Unified color scale for heatmaps
   const SCIENTIFIC_RANGE = useMemo(() => ([
@@ -297,36 +286,60 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
       >
         <Map mapLib={maplibregl} reuseMaps mapStyle={MAP_STYLE} attributionControl={false} {...viewState} />
       </DeckGL>
-      {/* Time Slider UI */}
-      {timeRange && (
-        <div 
-          style={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', width: '80%', maxWidth: 600, zIndex: 10 }}
-          className="bg-background/95 backdrop-blur-md border border-border rounded-xl p-4 flex flex-col gap-3 shadow-lg"
-        >
-          <div className="flex justify-between items-center px-1">
-             <button 
-                onClick={() => setIsPlaying(!isPlaying)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-muted hover:bg-muted/80 text-foreground transition-colors cursor-pointer border border-border"
-             >
-                {isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
-             </button>
-             <div className="text-foreground font-mono text-sm tracking-widest font-semibold">
-                {new Date(currentTime).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-             </div>
+      {/* Time Filter UI */}
+      <div 
+        style={{ position: 'absolute', top: 24, left: 24, zIndex: 10 }}
+        className="flex gap-2"
+      >
+        <div className="bg-background/95 backdrop-blur-md border border-border rounded-lg shadow-md p-2 flex items-center gap-3">
+          <div className="flex flex-col">
+            <label className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase px-1 mb-0.5">Year</label>
+            <select 
+              className="bg-transparent text-foreground text-sm font-semibold outline-none cursor-pointer focus:ring-0"
+              value={selectedYear}
+              onChange={e => { setSelectedYear(e.target.value); setSelectedMonth('All'); setSelectedDay('All'); }}
+            >
+              <option value="All">All Years</option>
+              {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
           </div>
-          <input 
-             type="range" 
-             min={timeRange[0]} 
-             max={timeRange[1]} 
-             value={currentTime} 
-             onChange={(e) => { setCurrentTime(Number(e.target.value)); setIsPlaying(false); }}
-             className="w-full h-2 bg-black/15 shadow-inner rounded-full appearance-none outline-none focus:ring-2 focus:ring-periwinkle cursor-pointer"
-             style={{
-                accentColor: 'var(--color-royal-blue)'
-             }}
-          />
+          
+          <div className="w-px h-8 bg-border"></div>
+          
+          <div className="flex flex-col">
+            <label className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase px-1 mb-0.5">Month</label>
+            <select 
+              className="bg-transparent text-foreground text-sm font-semibold outline-none cursor-pointer focus:ring-0 disabled:opacity-50"
+              value={selectedMonth}
+              onChange={e => { setSelectedMonth(e.target.value); setSelectedDay('All'); }}
+              disabled={selectedYear === 'All'}
+            >
+              <option value="All">All Months</option>
+              {Array.from({length: 12}, (_, i) => i + 1).map(m => (
+                <option key={m} value={m}>{new Date(2000, m - 1).toLocaleString('default', { month: 'short' })}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="w-px h-8 bg-border"></div>
+          
+          <div className="flex flex-col">
+            <label className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase px-1 mb-0.5">Day</label>
+            <select 
+              className="bg-transparent text-foreground text-sm font-semibold outline-none cursor-pointer focus:ring-0 disabled:opacity-50"
+              value={selectedDay}
+              onChange={e => setSelectedDay(e.target.value)}
+              disabled={selectedMonth === 'All'}
+            >
+              <option value="All">All Days</option>
+              {Array.from({length: 31}, (_, i) => i + 1).map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
         </div>
-      )}
+      </div>
+
 
       {/* Color Legend */}
       <div

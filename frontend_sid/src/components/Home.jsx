@@ -179,10 +179,6 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
         setScrollProgress(p);
 
         // ── Camera journey ──
-        // 0.0 → wide surface view
-        // 0.3 → push in toward float
-        // 0.6 → follow float downward
-        // 0.9 → pull back slightly, look up
         if (p < 0.25) {
           // Surface — wide
           cameraRef.current.x = 0;
@@ -201,11 +197,11 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
           cameraRef.current.y = lerp(-1.5, -3.5, t);
           cameraRef.current.z = lerp(4.5, 5, t);
         } else {
-          // Ascending, pull back
+          // Settle in the deep
           const t = (p - 0.75) / 0.25;
-          cameraRef.current.x = 0;
-          cameraRef.current.y = lerp(-3.5, -1, t);
-          cameraRef.current.z = lerp(5, 7, t);
+          cameraRef.current.x = 0; // return to center
+          cameraRef.current.y = lerp(-3.5, -4.0, t); // slowly continue down
+          cameraRef.current.z = lerp(5, 6, t); // pull back slightly to frame it nicely before the white content section
         }
 
         // ── Float position ──
@@ -214,7 +210,8 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
         } else if (p < 0.7) {
           floatRef.current.y = lerp(0, -5.5, (p - 0.2) / 0.5);
         } else {
-          floatRef.current.y = lerp(-5.5, -2, (p - 0.7) / 0.3);
+          // Slowly continue descending instead of shooting back up
+          floatRef.current.y = lerp(-5.5, -6.0, (p - 0.7) / 0.3);
         }
 
         // ── Depth lines visibility ──
@@ -226,7 +223,7 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
         } else if (p < 0.7) {
           fogRef.current = lerp(0.06, 0.1, (p - 0.3) / 0.4);
         } else {
-          fogRef.current = lerp(0.1, 0.06, (p - 0.7) / 0.3);
+          fogRef.current = lerp(0.1, 0.12, (p - 0.7) / 0.3);
         }
       },
     });
