@@ -73,10 +73,10 @@ You will be given a CONTEXT block before each user question containing one or bo
 
 ## Rules
 1. Ground every factual claim about actual ocean conditions in the DATA CONTEXT provided. Never invent specific numbers, float IDs, or coordinates that were not given to you.
-2. When the DATA CONTEXT says "nearest reference points" or "approximate", USE that data — present it as approximate/nearby data and include the distance. Do NOT refuse to answer just because the data came from a nearby location. Say something like "No exact data at your location, but the nearest ARGO observations (~X° away) show..."
-3. Only say "no data available" if the DATA CONTEXT explicitly says the closest point is too far or if no data exists at all.
+2. When the DATA CONTEXT provides "approximate nearby data", USE that data! Present it as approximate/nearby data and include the distance. Do NOT refuse to answer. Say something like "I don't have exact data for your coordinate, but the nearest ARGO observations (~X° away) show..."
+3. ONLY if the DATA CONTEXT explicitly states "(No matching data found)" or "(No ARGO data found globally)", explicitly state: "I don't have ARGO observations for that region in the current dataset; could you select that region on the map so I can retrieve the relevant profiles?"
 4. Use REFERENCE CONTEXT for explaining concepts (e.g., "what is a thermocline", "how does ARGO measure salinity") — cite it naturally without saying "according to the context."
-5. If a question requires data you don't have context for (e.g., a region the user hasn't queried on the map yet), tell the user to select that region on the map first, or ask a clarifying question about which region/depth/time range they mean.
+5. If a question requires data you don't have context for, tell the user to select that region on the map first, or ask a clarifying question.
 6. Keep answers concise and data-forward. Prefer a short paragraph plus key numbers over long essays. This is a dashboard sidebar chat, not a report.
 7. When relevant, describe patterns in plain oceanographic terms (e.g., "this indicates a strong halocline around 200m") rather than just repeating numbers back.
 8. Never fabricate float IDs, timestamps, or precise coordinates. If asked for specifics not present in DATA CONTEXT, say you don't have that specific reading available.
@@ -115,9 +115,45 @@ app.post('/ai/chat_context', async (req, res) => {
       return res.status(500).json({ error: 'GROQ_API_KEY not set on server' });
     }
     const { messages = [], lat, lon, rangeDeg, limit = 100 } = req.body || {};
-    const latNum = parseFloat(lat);
-    const lonNum = parseFloat(lon);
+    let latNum = parseFloat(lat);
+    let lonNum = parseFloat(lon);
     const rangeNum = parseFloat(rangeDeg);
+
+    // Try to auto-extract lat/lon from user messages (in case they typed coords while a map point is active)
+    let extractedLat = null;
+    let extractedLon = null;
+    const lastUserMessage = messages.slice().reverse().find(m => m.role === 'user')?.content || '';
+    const normalizedText = lastUserMessage.replace(/[°˚º]/g, ' ').replace(/\u200B/g, '');
+    const coordPatterns = [
+      /(-?\d+\.?\d*)\s*([NS])\s*[,;\s]+\s*(-?\d+\.?\d*)\s*([EW])/i,
+      /lat(?:itude)?\s*[:=]?\s*(-?\d+\.?\d*)\s*[,;\s]+\s*lon(?:gitude)?\s*[:=]?\s*(-?\d+\.?\d*)/i,
+      /\(?\s*(-?\d+\.?\d*)\s*(?:and|,|;|\s)+\s*(-?\d+\.?\d*)\s*\)?/i,
+    ];
+    for (const pattern of coordPatterns) {
+      const match = normalizedText.match(pattern);
+      if (match) {
+        if (match[2] && /[NSEW]/i.test(match[2])) {
+          extractedLat = parseFloat(match[1]);
+          if (/[Ss]/.test(match[2])) extractedLat = -extractedLat;
+          extractedLon = parseFloat(match[3]);
+          if (/[Ww]/.test(match[4])) extractedLon = -extractedLon;
+        } else {
+          const a = parseFloat(match[1]);
+          const b = parseFloat(match[2]);
+          if (Math.abs(a) <= 90 && Math.abs(b) <= 180) {
+            extractedLat = a;
+            extractedLon = b;
+          }
+        }
+        if (extractedLat !== null) break;
+      }
+    }
+
+    if (extractedLat !== null && extractedLon !== null) {
+      console.log(`[CONTEXT-OVERRIDE] Extracted coords from text: ${extractedLat}, ${extractedLon}`);
+      latNum = extractedLat;
+      lonNum = extractedLon;
+    }
 
     if (!Number.isFinite(latNum) || !Number.isFinite(lonNum) || !Number.isFinite(rangeNum)) {
       return res.status(400).json({ error: 'lat, lon, rangeDeg must be valid numbers' });
@@ -187,7 +223,6 @@ app.post('/ai/chat_context', async (req, res) => {
     };
 
     // Retrieve unstructured reference text for RAG
-    const lastUserMessage = messages.slice().reverse().find(m => m.role === 'user')?.content || '';
     const retrievedDocsList = retrieveDocs(lastUserMessage, 3);
 
     // Build context preamble
@@ -198,7 +233,7 @@ app.post('/ai/chat_context', async (req, res) => {
     } else if (summary.totals > 0) {
       preambleText += `[DATA CONTEXT]\n`;
       if (isFallback) {
-        preambleText += `(Note: No floats found exactly at Lat=${latNum}, Lon=${lonNum} ±${rangeNum}°. Showing approximate data from the ${summary.totals} nearest reference points, closest at Lat=${nearestLat}, Lon=${nearestLon?.toFixed(2)} — ${nearestDistDeg.toFixed(1)}° away.)\n`;
+        preambleText += `Approximate nearby data for Lat=${latNum}, Lon=${lonNum}. (Used ${summary.totals} nearest reference points. The closest point is at Lat=${nearestLat}, Lon=${nearestLon?.toFixed(2)}, which is ${nearestDistDeg.toFixed(1)}° away.)\n`;
       } else {
         preambleText += `Region/Range: Center Lat=${latNum}, Lon=${lonNum}, RangeDeg=${rangeNum}\n`;
       }
@@ -208,7 +243,7 @@ app.post('/ai/chat_context', async (req, res) => {
       if (summary.salinity) preambleText += `Salinity Stats (PSU): Min=${summary.salinity.min.toFixed(2)}, Max=${summary.salinity.max.toFixed(2)}, Mean=${summary.salinity.mean.toFixed(2)}, Count=${summary.salinity.count}\n`;
       if (summary.oxygen) preambleText += `Oxygen Stats (µmol/kg): Min=${summary.oxygen.min.toFixed(2)}, Max=${summary.oxygen.max.toFixed(2)}, Mean=${summary.oxygen.mean.toFixed(2)}, Count=${summary.oxygen.count}\n`;
     } else {
-      preambleText += `[DATA CONTEXT]\n(No matching floats found in the database, even globally.)\n`;
+      preambleText += `[DATA CONTEXT]\n(No matching data found)\n`;
     }
 
 
@@ -223,11 +258,14 @@ app.post('/ai/chat_context', async (req, res) => {
     // Map conversation messages to Groq chat format
     const chatMessages = [
       { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: preambleText },
-      ...messages.map(m => ({
+      ...messages.slice(0, -1).map(m => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: String(m.content || '')
-      }))
+      })),
+      {
+        role: 'user',
+        content: `${preambleText}\n\nUser Question:\n${messages[messages.length - 1]?.content || ''}`
+      }
     ];
 
     // Debug: log context and message count
@@ -243,7 +281,21 @@ app.post('/ai/chat_context', async (req, res) => {
 
     const text = completion.choices[0]?.message?.content || '';
     console.log(`[DEBUG] AI response: ${text.substring(0, 200)}...`);
-    res.json({ text, usedRows: rows.length });
+    
+    const responsePayload = { text, usedRows: rows.length };
+    
+    // If the user explicitly typed coordinates, or if we fell back, send back coordinates to shift the map/panel
+    if (extractedLat !== null && extractedLon !== null) {
+      if (isFallback && nearestLat !== null && nearestLon !== null) {
+        responsePayload.extractedCoords = { lat: nearestLat, lon: nearestLon };
+      } else {
+        responsePayload.extractedCoords = { lat: extractedLat, lon: extractedLon };
+      }
+    } else if (isFallback && nearestLat !== null && nearestLon !== null) {
+      responsePayload.extractedCoords = { lat: nearestLat, lon: nearestLon };
+    }
+
+    res.json(responsePayload);
   } catch (err) {
     console.error('Chat context handler failed:', err);
     res.status(500).json({ error: 'An error occurred while communicating with the Groq AI service.' });
@@ -264,19 +316,12 @@ app.post('/ai/chat', async (req, res) => {
     const lastUserMessage = messages.slice().reverse().find(m => m.role === 'user')?.content || '';
     const retrievedDocsList = retrieveDocs(lastUserMessage, 3);
 
-    // Try to auto-extract lat/lon from ALL user messages (search newest first)
+    // Try to auto-extract lat/lon from the latest user message
     let extractedLat = null;
     let extractedLon = null;
 
-    // Combine all user messages for coordinate search (newest first, so latest coords win)
-    const allUserText = messages
-      .filter(m => m.role === 'user')
-      .map(m => m.content)
-      .reverse()
-      .join(' ');
-
     // Normalize degree-like characters: °, ˚, º, and unicode variants
-    const normalizedText = allUserText.replace(/[°˚º]/g, ' ').replace(/\u200B/g, '');
+    const normalizedText = lastUserMessage.replace(/[°˚º]/g, ' ').replace(/\u200B/g, '');
 
     // Match patterns like: "26 N, 66 W", "26N 66W", "lat 26 lon -66", etc.
     const coordPatterns = [
@@ -314,6 +359,9 @@ app.post('/ai/chat', async (req, res) => {
     console.log(`[AUTO-EXTRACT] extractedLat=${extractedLat}, extractedLon=${extractedLon}`);
 
     let preambleText = `=== CONTEXT BLOCK ===\n`;
+    let isFallback = false;
+    let nearestLat = null;
+    let nearestLon = null;
 
     // If we extracted coordinates, auto-query the database
     if (Number.isFinite(extractedLat) && Number.isFinite(extractedLon) &&
@@ -337,10 +385,7 @@ app.post('/ai/chat', async (req, res) => {
       let db = await client.query(q, [latMin, latMax, lonMin, lonMax]);
       let rows = (db.rows || []).map(normalizeMetrics);
 
-      let isFallback = false;
       let nearestDistDeg = 0;
-      let nearestLat = null;
-      let nearestLon = null;
 
       if (rows.length === 0) {
         console.log('[AUTO-EXTRACT] No data in region, falling back to nearest');
@@ -382,7 +427,7 @@ app.post('/ai/chat', async (req, res) => {
       } else if (summary.totals > 0) {
         preambleText += `[DATA CONTEXT]\n`;
         if (isFallback) {
-          preambleText += `(Auto-detected coordinates: Lat=${extractedLat}, Lon=${extractedLon}. No exact matches. Showing approximate data from ${summary.totals} nearest points, closest at Lat=${nearestLat}, Lon=${nearestLon?.toFixed(2)} — ${nearestDistDeg.toFixed(1)}° away.)\n`;
+          preambleText += `Approximate nearby data for Lat=${extractedLat}, Lon=${extractedLon}. (Used ${summary.totals} nearest reference points. The closest point is at Lat=${nearestLat}, Lon=${nearestLon?.toFixed(2)}, which is ${nearestDistDeg.toFixed(1)}° away.)\n`;
         } else {
           preambleText += `Auto-detected Region: Lat=${extractedLat}, Lon=${extractedLon} ±2°\n`;
         }
@@ -392,7 +437,7 @@ app.post('/ai/chat', async (req, res) => {
         if (summary.salinity) preambleText += `Salinity (PSU): Min=${summary.salinity.min.toFixed(2)}, Max=${summary.salinity.max.toFixed(2)}, Mean=${summary.salinity.mean.toFixed(2)}\n`;
         if (summary.oxygen) preambleText += `Oxygen (µmol/kg): Min=${summary.oxygen.min.toFixed(2)}, Max=${summary.oxygen.max.toFixed(2)}, Mean=${summary.oxygen.mean.toFixed(2)}\n`;
       } else {
-        preambleText += `[DATA CONTEXT]\n(No ARGO data found globally.)\n`;
+        preambleText += `[DATA CONTEXT]\n(No matching data found)\n`;
       }
     } else {
       preambleText += `[DATA CONTEXT]\n(No coordinates detected in the user's message and no region selected on the map.)\n`;
@@ -410,11 +455,14 @@ app.post('/ai/chat', async (req, res) => {
 
     const chatMessages = [
       { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: preambleText },
-      ...messages.map(m => ({
+      ...messages.slice(0, -1).map(m => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: String(m.content || '')
-      }))
+      })),
+      {
+        role: 'user',
+        content: `${preambleText}\n\nUser Question:\n${messages[messages.length - 1]?.content || ''}`
+      }
     ];
 
     const completion = await groq.chat.completions.create({
@@ -426,7 +474,19 @@ app.post('/ai/chat', async (req, res) => {
 
     const text = completion.choices[0]?.message?.content || '';
     console.log(`[DEBUG /ai/chat] AI response: ${text.substring(0, 200)}...`);
-    res.json({ text });
+    
+    // Return extracted coordinates so the frontend can trigger the Visualization Panel
+    const responsePayload = { text };
+    if (extractedLat !== null && extractedLon !== null) {
+      if (isFallback && nearestLat !== null && nearestLon !== null) {
+        // If we fell back to nearest points, open the visualization panel at that nearest location
+        responsePayload.extractedCoords = { lat: nearestLat, lon: nearestLon };
+      } else {
+        responsePayload.extractedCoords = { lat: extractedLat, lon: extractedLon };
+      }
+    }
+    
+    res.json(responsePayload);
   } catch (err) {
     console.error('Chat handler failed:', err);
 

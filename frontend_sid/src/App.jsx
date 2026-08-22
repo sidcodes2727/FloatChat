@@ -7,12 +7,14 @@ import Home from './components/Home';
 import OceanMap from './components/OceanMap';
 import MetricMap from './components/MetricMap';
 import GlobeMap from './components/GlobeMap';
+import VisualizationPanel from './components/VisualizationPanel';
 import { Bot, X } from 'lucide-react';
 
 function OceanVizApp() {
     const [chatOpen, setChatOpen] = useState(false);
     const [activePage, setActivePage] = useState('Home');
     const [selectedCoords, setSelectedCoords] = useState(null); // { lat, lon } from map click
+    const [visPanelOpen, setVisPanelOpen] = useState(false);
 
     const isFullScreenMap = ['Argo Floats', 'Salinity', 'Temperature', 'Pressure', '3D Globe'].includes(activePage);
 
@@ -20,15 +22,19 @@ function OceanVizApp() {
         <div className="h-screen flex flex-col text-white w-full overflow-hidden" style={{ background: 'transparent' }}>
             <Navbar activePage={activePage} setActivePage={setActivePage} />
 
-            <AnimatePresence mode="wait">
-                <motion.div
-                    key={activePage}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-                    className={isFullScreenMap ? 'flex-1 relative overflow-hidden' : 'flex-1 relative overflow-y-auto'}
-                >
+            <div 
+                className="flex-1 relative transition-all duration-300 ease-out"
+                style={{ marginLeft: visPanelOpen ? '420px' : '0' }}
+            >
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={activePage}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                        className={isFullScreenMap ? 'w-full h-full relative overflow-hidden' : 'w-full h-full relative overflow-y-auto'}
+                    >
                     {activePage === 'Depth Profiles' && (
                         <div
                             className="rounded-xl mx-3 md:mx-5 my-3"
@@ -42,13 +48,14 @@ function OceanVizApp() {
                         </div>
                     )}
                     {activePage === 'Home' && <Home setActivePage={setActivePage} setChatOpen={setChatOpen} />}
-                    {activePage === 'Argo Floats' && <OceanMap setActivePage={setActivePage} onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setChatOpen(true); }} />}
-                    {activePage === 'Salinity' && <MetricMap metric="salinity" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setChatOpen(true); }} />}
-                    {activePage === 'Temperature' && <MetricMap metric="temperature" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setChatOpen(true); }} />}
-                    {activePage === 'Pressure' && <MetricMap metric="pressure" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setChatOpen(true); }} />}
+                    {activePage === 'Argo Floats' && <OceanMap setActivePage={setActivePage} onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setVisPanelOpen(true); setChatOpen(true); }} />}
+                    {activePage === 'Salinity' && <MetricMap metric="salinity" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setVisPanelOpen(true); setChatOpen(true); }} />}
+                    {activePage === 'Temperature' && <MetricMap metric="temperature" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setVisPanelOpen(true); setChatOpen(true); }} />}
+                    {activePage === 'Pressure' && <MetricMap metric="pressure" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setVisPanelOpen(true); setChatOpen(true); }} />}
                     {activePage === '3D Globe' && <GlobeMap />}
                 </motion.div>
-            </AnimatePresence>
+                </AnimatePresence>
+            </div>
 
             {/* ── Chatbot FAB ── */}
             <motion.button
@@ -109,7 +116,21 @@ function OceanVizApp() {
                 </AnimatePresence>
             </motion.button>
 
-            <Chatbot chatOpen={chatOpen} setChatOpen={setChatOpen} selectedCoords={selectedCoords} />
+            <Chatbot 
+                chatOpen={chatOpen} 
+                setChatOpen={setChatOpen} 
+                selectedCoords={selectedCoords} 
+                onDataVisualized={(lat, lon) => {
+                    setSelectedCoords({ lat, lon });
+                    setVisPanelOpen(true);
+                }}
+            />
+
+            {/* Render the side panel, conditionally mounted or using its own AnimatePresence */}
+            <VisualizationPanel 
+                coords={visPanelOpen ? selectedCoords : null} 
+                onClose={() => setVisPanelOpen(false)} 
+            />
         </div>
     );
 }

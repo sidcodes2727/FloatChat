@@ -72,7 +72,7 @@ function MessageBubble({ message }) {
 }
 
 /* ─── Chatbot panel ─── */
-function Chatbot({ chatOpen, setChatOpen, selectedCoords }) {
+export default function Chatbot({ chatOpen, setChatOpen, selectedCoords, onDataVisualized }) {
     const CONCISE_INSTRUCTIONS = "You are floatCHAT. Answer very concisely (1–2 sentences). Use ARGO data when provided. Include numbers with units. If uncertain, say so briefly.";
 
     const [messages, setMessages] = useState([
@@ -131,8 +131,14 @@ function Chatbot({ chatOpen, setChatOpen, selectedCoords }) {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error || 'Failed to get response');
+            
             const reply = (data?.text || '').trim() || "I'm not sure how to answer that yet.";
             setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: reply }]);
+
+            // If the backend auto-extracted coordinates from the user's message, trigger the visualization panel
+            if (data?.extractedCoords && onDataVisualized) {
+                onDataVisualized(data.extractedCoords.lat, data.extractedCoords.lon);
+            }
         } catch (e) {
             setError(e.message || 'Something went wrong');
             setMessages(prev => [...prev, { id: Date.now() + 2, role: 'assistant', content: 'Sorry, I could not reach the AI service.' }]);
@@ -368,5 +374,3 @@ function Chatbot({ chatOpen, setChatOpen, selectedCoords }) {
         </AnimatePresence>
     );
 }
-
-export default Chatbot;
