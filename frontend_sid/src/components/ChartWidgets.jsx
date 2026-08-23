@@ -219,13 +219,13 @@ export function StatCard({ label, value, unit, icon, color = '#00d4ff' }) {
                     <span style={{ color }}>{icon}</span>
                 </div>
             </div>
-            <p
-                className="text-xl md:text-2xl font-bold text-white break-all"
+            <div
+                className="text-xl md:text-2xl font-bold text-white truncate w-full flex items-baseline"
                 style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}
             >
-                {value}
+                {typeof value === 'number' && !Number.isInteger(value) ? value.toFixed(2) : value}
                 {unit && <span className="text-xs md:text-sm ml-1.5 font-normal" style={{ color: 'rgba(232,244,253,0.35)' }}>{unit}</span>}
-            </p>
+            </div>
         </motion.div>
     );
 }

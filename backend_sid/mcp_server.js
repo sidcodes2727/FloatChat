@@ -46,7 +46,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                         latitude: { type: "number", description: "Latitude coordinate of the region center" },
                         longitude: { type: "number", description: "Longitude coordinate of the region center" },
                         rangeDeg: { type: "number", description: "Bounding box range in degrees (e.g. 5)" },
-                        year: { type: ["number", "null"], description: "Optional specific year to query (e.g. 2023). Leave empty for all years." }
+                        year: { type: ["number", "null"], description: "Optional year to filter the data by" },
+                        locationName: { type: "string", description: "Optional name of the location being queried (e.g. 'Arabian Sea')" }
                     },
                     required: ["latitude", "longitude", "rangeDeg"]
                 }
@@ -84,18 +85,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { latitude, longitude, rangeDeg, year } = request.params.arguments;
             const latMin = latitude - rangeDeg;
             const latMax = latitude + rangeDeg;
-            const lonMin = longitude - rangeDeg;
-            const lonMax = longitude + rangeDeg;
+            
+            const lonMin1 = longitude - rangeDeg;
+            const lonMax1 = longitude + rangeDeg;
+            
+            const lon360 = longitude < 0 ? longitude + 360 : longitude;
+            const lonMin2 = lon360 - rangeDeg;
+            const lonMax2 = lon360 + rangeDeg;
 
             let q = `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
                      FROM t1
                      WHERE latitude BETWEEN $1 AND $2
-                       AND longitude BETWEEN $3 AND $4
+                       AND ( (longitude BETWEEN $3 AND $4) OR (longitude BETWEEN $5 AND $6) )
                        AND (temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL)`;
-            let params = [latMin, latMax, lonMin, lonMax];
+            let params = [latMin, latMax, lonMin1, lonMax1, lonMin2, lonMax2];
             
             if (year) {
-               q += ` AND EXTRACT(YEAR FROM time_ts) = $5`;
+               q += ` AND EXTRACT(YEAR FROM time_ts) = $7`;
                params.push(year);
             }
             q += ` ORDER BY time_ts DESC, depth ASC LIMIT 500`;

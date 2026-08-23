@@ -72,7 +72,7 @@ app.post('/ai/chat', async (req, res) => {
     }));
 
     // Setup initial messages
-    let systemPrompt = "You are floatCHAT — your ocean data assistant. You have access to tools to search ocean knowledge and query live ARGO data. Use them when necessary to answer the user's questions. CRITICAL RULE: Answer concisely (1-3 sentences). Only use tools if the user asks for data or specific definitions.";
+    let systemPrompt = "You are floatCHAT — your ocean data assistant. You have access to tools to search ocean knowledge and query live ARGO data. Use them when necessary to answer the user's questions. CRITICAL RULE: When you receive data summaries from the database, explain them naturally and conversationally to the user in 1-3 sentences. Do not just copy-paste the raw summary text.";
     
     const groqMessages = [{ role: 'system', content: systemPrompt }];
     messages.forEach(m => {
@@ -84,8 +84,8 @@ app.post('/ai/chat', async (req, res) => {
     let summaries = []; // For frontend charts
     let totalRowsUsed = 0;
 
-    // Loop for tool calling (up to 3 iterations)
-    for (let i = 0; i < 3; i++) {
+    // Loop for tool calling (up to 10 iterations)
+    for (let i = 0; i < 10; i++) {
         const groqReq = {
             model: 'openai/gpt-oss-120b',
             messages: groqMessages,
@@ -137,7 +137,7 @@ app.post('/ai/chat', async (req, res) => {
                                 return { count: vals.length, min: Math.min(...vals), max: Math.max(...vals), mean: parseFloat((vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2)) };
                             };
                             summaries.push({
-                                region: { name: "Extracted Region", center: { lat: args.latitude, lon: args.longitude }, rangeDeg: args.rangeDeg, year: args.year || "All Years" },
+                                region: { name: args.locationName || `Region (${args.latitude.toFixed(1)}, ${args.longitude.toFixed(1)})`, center: { lat: args.latitude, lon: args.longitude }, rangeDeg: args.rangeDeg, year: args.year || "All Years" },
                                 totals: parsed.rowCount,
                                 depth: stat(rows.map(r => r.depth)),
                                 temperature: stat(rows.map(r => r.temperature)),
@@ -146,7 +146,7 @@ app.post('/ai/chat', async (req, res) => {
                                 points: rows.slice(0, 300)
                             });
                             // Condense text for LLM to avoid context overflow
-                            resultText = `Database returned ${parsed.rowCount} rows. Summaries: Temp Avg ${stat(rows.map(r=>r.temperature))?.mean}, Salinity Avg ${stat(rows.map(r=>r.salinity))?.mean}. Use this summary.`;
+                            resultText = `Database search successful. Found ${parsed.rowCount} records. Average Temperature: ${stat(rows.map(r=>r.temperature))?.mean}°C, Average Salinity: ${stat(rows.map(r=>r.salinity))?.mean} PSU.`;
                         } else {
                             resultText = "Database returned 0 rows.";
                         }
@@ -181,7 +181,7 @@ app.post('/ai/chat', async (req, res) => {
 app.get("/everything", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT * FROM t1 ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 100"
+      "SELECT * FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -208,7 +208,7 @@ app.get("/latlong", async (req, res) => {
 app.get("/temperature", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, temperature, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, temperature, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -220,7 +220,7 @@ app.get("/temperature", async (req, res) => {
 app.get("/pressure", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, pressure, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND pressure IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, pressure, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND pressure IS NOT NULL AND time_ts IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -232,7 +232,7 @@ app.get("/pressure", async (req, res) => {
 app.get("/salinity", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, salinity, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, salinity, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -244,7 +244,7 @@ app.get("/salinity", async (req, res) => {
 app.get("/oxygen", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, oxygen, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, oxygen, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -256,7 +256,7 @@ app.get("/oxygen", async (req, res) => {
 app.get("/nitrate", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, nitrate, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND nitrate IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, nitrate, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND nitrate IS NOT NULL AND time_ts IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC"
     );
     // Nitrate is left as-is; no normalization to 0 requested
     res.json(result.rows);
@@ -268,7 +268,7 @@ app.get("/nitrate", async (req, res) => {
 app.get("/depth", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, depth, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, depth, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND depth IS NOT NULL AND time_ts IS NOT NULL ORDER BY time_ts DESC"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -300,8 +300,8 @@ app.get("/profiles", async (req, res) => {
        WHERE latitude BETWEEN $1 AND $2
          AND longitude BETWEEN $3 AND $4
          AND depth IS NOT NULL
-       ORDER BY time_ts ASC, depth ASC
-       LIMIT 5000`,
+         AND time_ts IS NOT NULL
+       ORDER BY time_ts ASC, depth ASC`,
       [latMin, latMax, lonMin, lonMax]
     );
     const rows = (result.rows || []).map(normalizeMetrics);
@@ -314,7 +314,7 @@ app.get("/profiles", async (req, res) => {
 app.get("/time", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, time_ts FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, time_ts FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL ORDER BY time_ts DESC"
     );
     res.json(result.rows);
   } catch (err) {
