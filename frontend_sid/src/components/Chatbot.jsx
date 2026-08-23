@@ -34,16 +34,16 @@ function MessageBubble({ message }) {
             className={`flex ${isUser ? 'justify-end' : 'justify-start'} items-end gap-2`}
         >
             {!isUser && (
-                <div className="w-7 h-7 rounded bg-white/10 flex items-center justify-center shrink-0 mb-0.5 border border-white/10 shadow-sm">
-                    <Bot size={14} className="text-periwinkle" />
+                <div className="w-7 h-7 rounded bg-white flex items-center justify-center shrink-0 mb-0.5 border border-border shadow-sm">
+                    <Bot size={14} className="text-[var(--color-royal-blue)]" />
                 </div>
             )}
 
             <div
                 className={`max-w-[82%] px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap rounded-2xl shadow-sm ${
                     isUser
-                        ? 'bg-periwinkle text-white rounded-br-sm'
-                        : 'bg-white/10 text-white border border-white/10 rounded-bl-sm font-serif backdrop-blur-md'
+                        ? 'bg-[var(--color-royal-blue)] text-white rounded-br-sm'
+                        : 'bg-white text-foreground border border-border rounded-bl-sm font-sans'
                 }`}
             >
                 {message.content}
@@ -131,27 +131,22 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 32, scale: 0.94 }}
                     transition={{ duration: 0.28, ease: [0.34, 1.56, 0.64, 1] }}
-                    className="fixed bottom-24 right-4 md:right-6 z-50 w-[calc(100vw-2rem)] md:w-[420px] h-[560px] flex flex-col overflow-hidden shadow-2xl rounded-2xl"
-                    style={{
-                        background: 'rgba(9, 21, 64, 0.88)',
-                        backdropFilter: 'blur(16px)',
-                        border: '1px solid rgba(118, 146, 255, 0.2)', // periwinkle tint
-                    }}
+                    className="fixed bottom-24 right-4 md:right-6 z-50 w-[calc(100vw-2rem)] md:w-[420px] h-[560px] flex flex-col overflow-hidden shadow-2xl rounded-2xl bg-white border border-border"
                 >
                     {/* ── Header ── */}
-                    <div className="flex items-center justify-between px-5 py-4 shrink-0 border-b border-white/10 bg-black/20">
+                    <div className="flex items-center justify-between px-5 py-4 shrink-0 border-b border-border bg-muted/50">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded bg-white/5 border border-white/10 flex items-center justify-center relative shadow-sm">
-                                <Bot size={20} className="text-periwinkle" />
-                                <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-green-500 border-2 border-[#091540]" />
+                            <div className="w-10 h-10 rounded bg-white border border-border flex items-center justify-center relative shadow-sm">
+                                <Bot size={20} className="text-[var(--color-royal-blue)]" />
+                                <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-green-500 border-2 border-white" />
                             </div>
                             <div>
-                                <h3 className="text-sm font-bold text-white leading-none font-display tracking-wide uppercase">
+                                <h3 className="text-sm font-bold text-foreground leading-none font-sans tracking-wide uppercase">
                                     floatCHAT
                                 </h3>
                                 <div className="flex items-center gap-1.5 mt-1.5">
                                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                                    <span className="text-[10px] font-mono uppercase tracking-widest text-white/60">
+                                    <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
                                         Online · Ocean AI
                                     </span>
                                 </div>
@@ -159,12 +154,12 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
                         </div>
 
                         <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-periwinkle/20 border border-periwinkle/30">
-                                <Sparkles size={12} className="text-periwinkle" />
-                                <span className="text-[10px] font-semibold uppercase tracking-widest text-periwinkle">AI</span>
+                            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--color-royal-blue)]/10 border border-[var(--color-royal-blue)]/20">
+                                <Sparkles size={12} className="text-[var(--color-royal-blue)]" />
+                                <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-royal-blue)]">AI</span>
                             </div>
                             <button
-                                className="text-white/50 hover:text-white hover:bg-white/10 p-1.5 rounded-md transition-colors"
+                                className="text-muted-foreground hover:text-foreground hover:bg-black/5 p-1.5 rounded-md transition-colors cursor-pointer"
                                 onClick={() => setChatOpen(false)}
                             >
                                 <X size={16} />
@@ -190,7 +185,7 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
                                     <button
                                         key={prompt}
                                         onClick={() => sendMessage(prompt)}
-                                        className="text-[11px] px-3 py-1.5 rounded border border-white/20 text-white hover:bg-white/10 font-mono tracking-tight transition-colors"
+                                        className="text-[11px] px-3 py-1.5 rounded border border-border text-foreground hover:border-[var(--color-royal-blue)] hover:text-[var(--color-royal-blue)] hover:bg-muted font-mono tracking-tight transition-colors cursor-pointer"
                                     >
                                         {prompt}
                                     </button>
@@ -207,29 +202,29 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
                     </div>
 
                     {/* ── Input ── */}
-                    <div className="px-4 py-4 shrink-0 border-t border-white/10 bg-black/20">
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 bg-white/5 focus-within:border-periwinkle focus-within:ring-1 focus-within:ring-periwinkle transition-all">
+                    <div className="px-4 py-4 shrink-0 border-t border-border bg-white">
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-background focus-within:border-[var(--color-royal-blue)] focus-within:ring-1 focus-within:ring-[var(--color-royal-blue)] transition-all">
                             <input
                                 type="text"
                                 placeholder="Ask about oceanographic data..."
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 onKeyDown={onKeyDown}
-                                className="flex-1 text-sm bg-transparent border-none outline-none font-sans text-white placeholder:text-white/40 px-1"
+                                className="flex-1 text-sm bg-transparent border-none outline-none font-sans text-foreground placeholder:text-muted-foreground px-1"
                             />
                             <button
                                 onClick={() => sendMessage()}
                                 disabled={loading || !input.trim()}
-                                className={`w-8 h-8 flex items-center justify-center rounded transition-all duration-200 ${
+                                className={`w-8 h-8 flex items-center justify-center rounded transition-all duration-200 cursor-pointer ${
                                     input.trim() && !loading
-                                        ? 'bg-periwinkle text-white hover:bg-royal-blue shadow-sm'
-                                        : 'bg-white/10 text-white/40 cursor-not-allowed'
+                                        ? 'bg-[var(--color-royal-blue)] text-white hover:bg-blue-700 shadow-sm'
+                                        : 'bg-muted text-muted-foreground cursor-not-allowed'
                                 }`}
                             >
                                 <Send size={14} className={input.trim() && !loading ? 'ml-0.5' : ''} />
                             </button>
                         </div>
-                        <p className="text-center mt-3 text-[10px] font-mono tracking-widest uppercase text-white/50">
+                        <p className="text-center mt-3 text-[10px] font-mono tracking-widest uppercase text-muted-foreground">
                             Powered by ARGO float data
                         </p>
                     </div>

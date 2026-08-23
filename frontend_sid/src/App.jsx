@@ -67,7 +67,7 @@ function OceanVizApp() {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => setChatPlotsOpen(true)}
-                        className="fixed bottom-6 left-5 md:left-6 z-40 flex items-center gap-2 px-4 py-2.5 rounded-full font-mono tracking-widest text-xs uppercase shadow-md transition-all cursor-pointer bg-foreground text-background border border-foreground/10 hover:shadow-lg"
+                        className="fixed bottom-6 left-5 md:left-6 z-40 flex items-center gap-2 px-4 py-2.5 rounded-full font-sans tracking-widest text-xs uppercase shadow-md transition-all cursor-pointer bg-white text-[var(--color-royal-blue)] border border-border hover:shadow-lg hover:border-[var(--color-royal-blue)]"
                     >
                         <BarChart3 size={16} />
                         Data Analysis
@@ -78,12 +78,13 @@ function OceanVizApp() {
             {/* ── Chatbot FAB ── */}
             <motion.button
                 onClick={() => setChatOpen(!chatOpen)}
-                className="fixed bottom-6 right-5 md:right-6 z-50 rounded-full flex items-center justify-center cursor-pointer border border-border shadow-md transition-all hover:shadow-lg"
+                className="fixed bottom-6 right-5 md:right-6 z-50 rounded-full flex items-center justify-center cursor-pointer border border-transparent shadow-md transition-all hover:shadow-lg"
                 style={{
                     width: 52,
                     height: 52,
-                    background: chatOpen ? 'var(--muted)' : 'var(--background)',
-                    color: 'var(--foreground)',
+                    background: chatOpen ? 'var(--background)' : 'var(--color-royal-blue)',
+                    color: chatOpen ? 'var(--foreground)' : '#ffffff',
+                    border: chatOpen ? '1px solid var(--border)' : 'none'
                 }}
                 whileHover={{ scale: 1.08 }}
                 whileTap={{ scale: 0.92 }}
@@ -107,7 +108,7 @@ function OceanVizApp() {
                             exit={{ rotate: 90, opacity: 0, scale: 0.7 }}
                             transition={{ duration: 0.18 }}
                         >
-                            <X size={18} style={{ color: 'var(--color-light-blue)' }} />
+                            <X size={18} />
                         </motion.div>
                     ) : (
                         <motion.div
@@ -117,7 +118,7 @@ function OceanVizApp() {
                             exit={{ rotate: -90, opacity: 0, scale: 0.7 }}
                             transition={{ duration: 0.18 }}
                         >
-                            <Bot size={20} style={{ color: 'var(--color-royal-blue)' }} />
+                            <Bot size={20} />
                         </motion.div>
                     )}
                 </AnimatePresence>

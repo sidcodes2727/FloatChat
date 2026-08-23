@@ -7,9 +7,12 @@ import {
 } from 'lucide-react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import OceanHeroCanvas from './3d/OceanHeroCanvas';
-import TelemetryHUD from './TelemetryHUD';
+
 import { cn } from '../lib/utils';
+import argoBuoyImg from '../assets/argo-buoy.png';
+import databaseImg from '../assets/database-ingestion.jpg';
+import dashboardImg from '../assets/dashboard-ui.png';
+import bgImg from '../assets/bg.jpg';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -105,66 +108,49 @@ function QuickExploreCard({ icon, title, subtitle, onClick }) {
   );
 }
 
-/* ══════════════════════════════════════════════
-   SCROLLY 3D INTRO — replaces the old ScrollyIntro
-   ══════════════════════════════════════════════ */
+
+
+
+
 const SCROLL_SECTIONS = [
   {
     phase: '01',
     label: 'Collection',
     heading: <>Autonomous <span className="italic text-periwinkle">Sensing</span></>,
     body: 'Thousands of autonomous Argo floats patrol the deep ocean. They continuously collect real-time, critical telemetry on temperature, salinity, and pressure from beneath the waves.',
+    image: argoBuoyImg,
   },
   {
     phase: '02',
     label: 'Descent',
     heading: <>Into the <span className="italic text-royal-blue">Deep</span></>,
     body: 'Each float descends through the water column, sampling temperature and salinity at every depth — from the sunlit surface to the crushing abyss at 2,000 meters below.',
+    image: bgImg,
   },
   {
     phase: '03',
     label: 'Measurement',
-    heading: <>Scientific <span className="italic text-light-ocean">Data</span></>,
+    heading: <>Scientific <span className="italic text-periwinkle">Data</span></>,
     body: 'Temperature gradients, salinity distributions, and pressure profiles are captured with laboratory precision. This data forms the backbone of global ocean monitoring.',
+    image: databaseImg,
   },
   {
     phase: '04',
     label: 'Analysis',
-    heading: <>AI-Powered <span className="italic text-periwinkle">Insights</span></>,
+    heading: <>AI-Powered <span className="italic text-royal-blue">Insights</span></>,
     body: 'Query the ocean through natural language. FloatCHAT synthesizes millions of data points into immediate, actionable oceanographic intelligence.',
+    image: dashboardImg,
   },
 ];
 
 /* ─── Main Home ─── */
 export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
-  // ── 3D scene control refs ──
-  const cameraRef = useRef({ x: 0, y: 1, z: 8 });
-  const floatRef = useRef({ y: 0 });
-  const depthVisRef = useRef(0);
-  const fogRef = useRef(0.06);
-  const mouseRef = useRef({ x: 0, y: 0 });
   const [scrollProgress, setScrollProgress] = useState(0);
-
-  // Scroll container ref
-  const scrollContainerRef = useRef(null);
   const heroSectionRef = useRef(null);
 
-  // ── Mouse tracking (subtle parallax) ──
-  useEffect(() => {
-    const handler = (e) => {
-      mouseRef.current.x = (e.clientX / window.innerWidth - 0.5) * 2;
-      mouseRef.current.y = (e.clientY / window.innerHeight - 0.5) * -2;
-    };
-    window.addEventListener('mousemove', handler, { passive: true });
-    return () => window.removeEventListener('mousemove', handler);
-  }, []);
-
-  // ── GSAP ScrollTrigger: drive 3D scene from scroll ──
   useEffect(() => {
     const container = mainScrollRef?.current;
     if (!container) return;
-
-    // We use the heroSectionRef (the tall scroll region) as the trigger
     const trigger = heroSectionRef.current;
     if (!trigger) return;
 
@@ -175,226 +161,143 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
       end: 'bottom bottom',
       scrub: 0.8,
       onUpdate: (self) => {
-        const p = self.progress; // 0 → 1
-        setScrollProgress(p);
-
-        // ── Camera journey ──
-        if (p < 0.25) {
-          // Surface — wide
-          cameraRef.current.x = 0;
-          cameraRef.current.y = lerp(1.5, 0.5, p / 0.25);
-          cameraRef.current.z = lerp(8, 6, p / 0.25);
-        } else if (p < 0.5) {
-          // Pushing in, descending
-          const t = (p - 0.25) / 0.25;
-          cameraRef.current.x = lerp(0, 0.5, t);
-          cameraRef.current.y = lerp(0.5, -1.5, t);
-          cameraRef.current.z = lerp(6, 4.5, t);
-        } else if (p < 0.75) {
-          // Deep dive
-          const t = (p - 0.5) / 0.25;
-          cameraRef.current.x = lerp(0.5, 0, t);
-          cameraRef.current.y = lerp(-1.5, -3.5, t);
-          cameraRef.current.z = lerp(4.5, 5, t);
-        } else {
-          // Settle in the deep
-          const t = (p - 0.75) / 0.25;
-          cameraRef.current.x = 0; // return to center
-          cameraRef.current.y = lerp(-3.5, -4.0, t); // slowly continue down
-          cameraRef.current.z = lerp(5, 6, t); // pull back slightly to frame it nicely before the white content section
-        }
-
-        // ── Float position ──
-        if (p < 0.2) {
-          floatRef.current.y = 0;
-        } else if (p < 0.7) {
-          floatRef.current.y = lerp(0, -5.5, (p - 0.2) / 0.5);
-        } else {
-          // Slowly continue descending instead of shooting back up
-          floatRef.current.y = lerp(-5.5, -6.0, (p - 0.7) / 0.3);
-        }
-
-        // ── Depth lines visibility ──
-        depthVisRef.current = p > 0.25 ? Math.min(1, (p - 0.25) / 0.2) : 0;
-
-        // ── Fog density (denser at depth) ──
-        if (p < 0.3) {
-          fogRef.current = 0.06;
-        } else if (p < 0.7) {
-          fogRef.current = lerp(0.06, 0.1, (p - 0.3) / 0.4);
-        } else {
-          fogRef.current = lerp(0.1, 0.12, (p - 0.7) / 0.3);
-        }
+        setScrollProgress(self.progress);
       },
     });
 
-    return () => {
-      st.kill();
-    };
+    return () => st.kill();
   }, [mainScrollRef]);
-
-  // ── GSAP hero text reveal ──
   useEffect(() => {
     const ctx = gsap.context(() => {
-      // Stagger-reveal the hero words
-      gsap.from('.hero-word', {
-        yPercent: 100,
-        opacity: 0,
-        stagger: 0.08,
-        duration: 0.9,
-        ease: 'power3.out',
-        delay: 0.3,
-      });
-
-      gsap.from('.hero-sub', {
-        opacity: 0,
-        y: 20,
-        duration: 0.7,
-        ease: 'power2.out',
-        delay: 0.8,
-      });
-
-      gsap.from('.hero-cta', {
-        opacity: 0,
-        y: 12,
-        duration: 0.5,
-        ease: 'power2.out',
-        delay: 1.0,
-      });
+      gsap.from('.hero-word', { yPercent: 100, opacity: 0, stagger: 0.08, duration: 0.9, ease: 'power3.out', delay: 0.3 });
+      gsap.from('.hero-sub', { opacity: 0, y: 20, duration: 0.7, ease: 'power2.out', delay: 0.8 });
+      gsap.from('.hero-cta', { opacity: 0, y: 12, duration: 0.5, ease: 'power2.out', delay: 1.0 });
     });
-
     return () => ctx.revert();
   }, []);
 
   return (
-    <div className="flex-1 relative">
-      {/* ═══ 3D OCEAN CANVAS (fixed background) ═══ */}
-      <OceanHeroCanvas
-        cameraRef={cameraRef}
-        floatRef={floatRef}
-        depthVisRef={depthVisRef}
-        fogRef={fogRef}
-        mouseRef={mouseRef}
-      />
-
-      {/* ═══ TELEMETRY HUD ═══ */}
-      <TelemetryHUD progress={scrollProgress} />
-
-      {/* ═══ SCROLLABLE CONTENT (on top of canvas) ═══ */}
+    <div className="flex-1 relative bg-background">
       <div className="relative z-10">
-
-        {/* ═══ HERO + 3D SCROLLYTELLING ═══ */}
         <div ref={heroSectionRef} style={{ height: '500vh' }}>
           <div className="sticky top-0 left-0 w-full h-screen overflow-hidden flex items-center">
-            <div className="max-w-6xl mx-auto px-6 md:px-12 w-full">
+            <div className="max-w-7xl mx-auto px-6 md:px-12 w-full">
 
-              {/* ── HERO HEADLINE (visible initially, fades as scroll advances) ── */}
-              <div
-                className="transition-opacity duration-500"
-                style={{ opacity: scrollProgress < 0.12 ? 1 : Math.max(0, 1 - (scrollProgress - 0.12) / 0.08) }}
-              >
-                {/* Badge */}
-                <div className="inline-flex items-center gap-2 px-3 py-1 mb-8 border border-white/15 rounded-full backdrop-blur-sm bg-white/5">
-                  <Sparkles size={12} className="text-periwinkle" />
-                  <span className="text-[10px] font-semibold tracking-widest font-mono uppercase text-light-ocean">
-                    Ocean Telemetry Active
-                  </span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded font-bold font-mono bg-periwinkle/20 text-periwinkle">
-                    LIVE
-                  </span>
-                </div>
-
-                {/* Headline with GSAP word reveal */}
-                <h1 className="text-5xl md:text-7xl lg:text-[5.5rem] mb-8 tracking-tight font-display text-white overflow-hidden">
-                  <span className="hero-word inline-block">Explore&nbsp;</span>
-                  <span className="hero-word inline-block">the&nbsp;</span>
-                  <span className="hero-word inline-block italic text-periwinkle">Depths</span>
-                  <br />
-                  <span className="hero-word inline-block">of&nbsp;</span>
-                  <span className="hero-word inline-block">Our&nbsp;</span>
-                  <span className="hero-word inline-block text-light-ocean">Oceans.</span>
-                </h1>
-
-                <p className="hero-sub text-lg md:text-xl mb-12 max-w-2xl leading-relaxed font-sans text-light-ocean/80">
-                  Interactive visualization from thousands of autonomous ARGO floats.
-                  Analyze temperature, salinity, pressure, and depth across the globe—powered by conversational AI.
-                </p>
-
-                <div className="hero-cta flex items-center gap-4 flex-wrap">
-                  <button
-                    onClick={() => setActivePage('Argo Floats')}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-md font-sans font-medium text-sm bg-royal-blue text-white hover:bg-[#152299] transition-all shadow-md cursor-pointer"
-                  >
-                    <MapPin size={16} />
-                    Init Ocean Map
-                  </button>
-                  <button
-                    onClick={() => setChatOpen?.(true)}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-md font-sans font-medium text-sm border border-white/20 text-white hover:bg-white/10 transition-all cursor-pointer"
-                    aria-label="Open chatbot assistant"
-                  >
-                    <Bot size={16} />
-                    Query AI Agent
-                  </button>
-                </div>
-              </div>
-
-              {/* ── SCROLL-DRIVEN SECTION CARDS ── */}
+              {/* Scroll Story Sections */}
               {SCROLL_SECTIONS.map((section, idx) => {
-                // Each section is visible in its own scroll quarter
-                const start = (idx + 1) * 0.2;
-                const end = start + 0.18;
-                const sectionOpacity = scrollProgress >= start && scrollProgress <= end + 0.04
-                  ? Math.min(1, Math.min(
-                      (scrollProgress - start) / 0.05,
-                      (end + 0.04 - scrollProgress) / 0.04
-                    ))
-                  : 0;
-
+                const start = idx * 0.26;
+                const fadeOutStart = start + 0.20;
+                const fadeOutEnd = start + 0.26;
+                
+                let sectionOpacity = 0;
+                if (scrollProgress >= start && scrollProgress <= fadeOutEnd) {
+                  const fadeIn = idx === 0 
+                    ? 1 
+                    : (scrollProgress - start) / 0.06;
+                    
+                  const fadeOut = idx === SCROLL_SECTIONS.length - 1
+                    ? 1
+                    : (fadeOutEnd - scrollProgress) / 0.06;
+                    
+                  sectionOpacity = Math.max(0, Math.min(1, fadeIn, fadeOut));
+                }
+                
                 return (
-                  <div
-                    key={section.phase}
-                    className="absolute top-0 left-0 w-full h-full flex items-center pointer-events-none"
-                    style={{ opacity: sectionOpacity }}
-                  >
-                    <div className="max-w-6xl mx-auto px-6 md:px-12 w-full">
-                      <span className="font-mono text-xs font-bold uppercase tracking-widest text-periwinkle/70 mb-6 block">
-                        Phase {section.phase}: {section.label}
-                      </span>
-                      <h2 className="text-4xl md:text-5xl lg:text-6xl text-white font-display mb-6">
-                        {section.heading}
-                      </h2>
-                      <p className="text-lg text-light-ocean/80 font-sans leading-relaxed max-w-lg">
-                        {section.body}
-                      </p>
+                  <div key={section.phase} className="absolute top-0 left-0 w-full h-full flex items-center pointer-events-none" style={{ opacity: sectionOpacity }}>
+                    <div className="max-w-7xl mx-auto px-6 md:px-12 w-full grid md:grid-cols-2 gap-16 items-center">
+                      {/* Text Column */}
+                      <div>
+                        <span className="font-mono text-xs md:text-sm font-bold uppercase tracking-[0.2em] text-muted-foreground mb-6 block">
+                          Phase {section.phase}: {section.label}
+                        </span>
+                        <h2 className="text-4xl md:text-5xl lg:text-6xl text-foreground font-display mb-6 leading-[1.15]">
+                          {section.heading}
+                        </h2>
+                        <p className="text-lg md:text-xl text-muted-foreground font-sans leading-relaxed max-w-xl">
+                          {section.body}
+                        </p>
+                      </div>
+                      
+                      {/* Image Column */}
+                      <div className="relative rounded-xl overflow-hidden shadow-lg">
+                        <div className="aspect-[4/3] w-full">
+                          {section.image && (
+                            <img src={section.image} alt={section.label} className="w-full h-full object-cover" />
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
               })}
-
             </div>
           </div>
+          
+          {/* Data Analysis Button (pinned bottom-left like in video) */}
+          <div className="fixed bottom-6 left-6 z-20 hidden md:block transition-opacity duration-300" style={{ opacity: scrollProgress < 0.9 ? 1 : 0 }}>
+            <button
+              onClick={() => setActivePage('Depth Profiles')}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-deep-navy text-white text-[11px] font-mono font-bold uppercase tracking-widest shadow-lg hover:bg-royal-blue transition-colors cursor-pointer"
+            >
+              <BarChart3 size={14} />
+              Data Analysis
+            </button>
+          </div>
 
-          {/* Scroll Indicator */}
-          <div
-            className="fixed bottom-8 left-12 z-20 pointer-events-none hidden md:flex items-center gap-4 transition-opacity duration-300"
-            style={{ opacity: scrollProgress < 0.9 ? 0.7 : 0 }}
-          >
-            <span className="font-mono text-xs tracking-widest text-light-ocean/60">SCROLL</span>
-            <div className="w-[1px] h-6 bg-light-ocean/30 relative overflow-hidden">
-              <div
-                className="w-full bg-periwinkle absolute top-0"
-                style={{ height: `${scrollProgress * 100}%` }}
-              />
+          {/* Scroll progress bar (right edge) */}
+          <div className="fixed right-6 bottom-6 z-20 pointer-events-none hidden md:flex items-center gap-3 transition-opacity duration-300" style={{ opacity: scrollProgress > 0.01 && scrollProgress < 0.9 ? 0.6 : 0 }}>
+            <div className="w-[2px] h-16 bg-border rounded-full relative overflow-hidden">
+              <div className="w-full bg-periwinkle absolute top-0 rounded-full" style={{ height: `${scrollProgress * 100}%` }} />
             </div>
           </div>
         </div>
 
-        {/* ═══ REGULAR CONTENT SECTIONS (existing, on white bg) ═══ */}
         <div className="bg-background relative z-10">
-          <div className="max-w-6xl mx-auto px-6 md:px-12 py-16 md:py-24">
+          <div className="max-w-7xl mx-auto px-6 md:px-12 py-16 md:py-24">
+            
+            {/* Main Hero (moved below scroll animation) */}
+            <div className="py-24 mb-12">
+              <div className="inline-flex items-center gap-2 px-3 py-1 mb-8 border border-border rounded-full bg-muted/50">
+                <Sparkles size={12} className="text-periwinkle" />
+                <span className="text-[10px] font-semibold tracking-widest font-mono uppercase text-muted-foreground">
+                  Ocean Telemetry Active
+                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded font-bold font-mono bg-periwinkle/10 text-periwinkle border border-periwinkle/20">
+                  LIVE
+                </span>
+              </div>
+              <h1 className="text-5xl md:text-7xl lg:text-[5.5rem] mb-8 tracking-tight font-display text-foreground overflow-hidden">
+                <span className="hero-word inline-block">Explore&nbsp;</span>
+                <span className="hero-word inline-block">the&nbsp;</span>
+                <span className="hero-word inline-block italic text-royal-blue">Depths</span>
+                <br />
+                <span className="hero-word inline-block">of&nbsp;</span>
+                <span className="hero-word inline-block">Our&nbsp;</span>
+                <span className="hero-word inline-block text-periwinkle">Oceans.</span>
+              </h1>
+              <p className="hero-sub text-lg md:text-xl mb-12 max-w-2xl leading-relaxed font-sans text-muted-foreground">
+                Interactive visualization from thousands of autonomous ARGO floats.
+                Analyze temperature, salinity, pressure, and depth across the globe—powered by conversational AI.
+              </p>
+              <div className="hero-cta flex items-center gap-4 flex-wrap">
+                <button
+                  onClick={() => setActivePage('Argo Floats')}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-md font-sans font-medium text-sm bg-royal-blue text-white hover:bg-[#1d4ed8] transition-all shadow-md cursor-pointer"
+                >
+                  <MapPin size={16} />
+                  Init Ocean Map
+                </button>
+                <button
+                  onClick={() => setChatOpen?.(true)}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-md font-sans font-medium text-sm border border-border text-foreground hover:bg-muted transition-all cursor-pointer bg-background"
+                  aria-label="Open chatbot assistant"
+                >
+                  <Bot size={16} />
+                  Query AI Agent
+                </button>
+              </div>
+            </div>
 
-            {/* ═══ STATS ═══ */}
             <motion.div
               className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-32 border-y border-border py-8"
               initial={{ opacity: 0, y: 16 }}
@@ -408,15 +311,8 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
               <StatCounter value={147}   label="Countries"       icon={<MapPin size={14} />}   color="var(--color-deep-navy)" />
             </motion.div>
 
-            {/* ═══ FEATURES ═══ */}
             <div className="mb-32">
-              <motion.div
-                className="mb-16"
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.4 }}
-              >
+              <motion.div className="mb-16" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
                 <span className="font-mono text-[10px] font-bold uppercase tracking-widest mb-4 block text-muted-foreground">
                   System Capabilities
                 </span>
@@ -424,30 +320,13 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
                   Platform Features
                 </h2>
               </motion.div>
-
               <div className="grid md:grid-cols-3 gap-6">
-                <FeatureCard
-                  icon={<Waves size={20} />}
-                  title="Ocean Depth Profiles"
-                  description="Visualize ocean depth measurements with color-coded markers. Explore vertical profiles of temperature, salinity, and oxygen at any coordinate."
-                  delay={0}
-                />
-                <FeatureCard
-                  icon={<BarChart3 size={20} />}
-                  title="Advanced Analytics"
-                  description="Comprehensive analytics dashboard with real-time data processing. Monitor trends, detect anomalies, and compare oceanographic metrics across regions."
-                  delay={100}
-                />
-                <FeatureCard
-                  icon={<Globe size={20} />}
-                  title="Global Coverage"
-                  description="Explore oceanographic data from every major ocean basin. Complete coverage from the Arctic to the Antarctic with thousands of active measurement points."
-                  delay={200}
-                />
+                <FeatureCard icon={<Waves size={20} />} title="Ocean Depth Profiles" description="Visualize ocean depth measurements with color-coded markers. Explore vertical profiles of temperature, salinity, and oxygen at any coordinate." delay={0} />
+                <FeatureCard icon={<BarChart3 size={20} />} title="Advanced Analytics" description="Comprehensive analytics dashboard with real-time data processing. Monitor trends, detect anomalies, and compare oceanographic metrics across regions." delay={100} />
+                <FeatureCard icon={<Globe size={20} />} title="Global Coverage" description="Explore oceanographic data from every major ocean basin. Complete coverage from the Arctic to the Antarctic with thousands of active measurement points." delay={200} />
               </div>
             </div>
 
-            {/* ═══ HOW IT WORKS ═══ */}
             <motion.div
               className="mb-32 py-16 border-y border-border"
               initial={{ opacity: 0, y: 16 }}
@@ -463,31 +342,23 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
                   Operational Workflow
                 </h2>
               </div>
-
               <div className="grid md:grid-cols-3 gap-12 relative">
                 {[
                   { n: '01', title: 'Target Area', desc: 'Input coordinates or select region on the global projection to initiate scan.' },
                   { n: '02', title: 'Data Retrieval', desc: 'Retrieve depth profiles, temperature gradients, and salinity distributions from active floats.' },
                   { n: '03', title: 'AI Synthesis', desc: 'Query floatCHAT to summarize patterns, detect anomalies, or compare specific oceanic metrics.' },
                 ].map((step) => (
-                  <div key={step.n} className="flex flex-col border-l border-border pl-6">
+                  <div key={step.n} className="flex flex-col border-l-2 border-royal-blue pl-6">
                     <div className="font-mono text-sm text-muted-foreground mb-4">{step.n}</div>
-                    <h4 className="text-xl font-display text-foreground mb-3">{step.title}</h4>
+                    <h4 className="text-xl font-display text-foreground mb-3 font-semibold">{step.title}</h4>
                     <p className="text-sm font-sans text-muted-foreground leading-relaxed">{step.desc}</p>
                   </div>
                 ))}
               </div>
             </motion.div>
 
-            {/* ═══ QUICK EXPLORE ═══ */}
             <div className="mb-24">
-              <motion.div
-                className="mb-12"
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.4 }}
-              >
+              <motion.div className="mb-12" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.4 }}>
                 <span className="font-mono text-[10px] font-bold uppercase tracking-widest mb-4 block text-muted-foreground">
                   Quick Access
                 </span>
@@ -495,36 +366,13 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
                   Explore by Metric
                 </h2>
               </motion.div>
-
-              <motion.div
-                className="grid md:grid-cols-3 gap-4"
-                initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.45 }}
-              >
-                <QuickExploreCard
-                  icon={<Thermometer size={20} />}
-                  title="Temperature Map"
-                  subtitle="Sea surface & depth temperature gradients"
-                  onClick={() => setActivePage('Temperature')}
-                />
-                <QuickExploreCard
-                  icon={<Droplets size={20} />}
-                  title="Salinity Map"
-                  subtitle="Ocean salinity distribution & patterns"
-                  onClick={() => setActivePage('Salinity')}
-                />
-                <QuickExploreCard
-                  icon={<Gauge size={20} />}
-                  title="Pressure Map"
-                  subtitle="Pressure measurements at various depths"
-                  onClick={() => setActivePage('Pressure')}
-                />
+              <motion.div className="grid md:grid-cols-3 gap-4" initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45 }}>
+                <QuickExploreCard icon={<Thermometer size={20} />} title="Temperature Map" subtitle="Sea surface & depth temperature gradients" onClick={() => setActivePage('Temperature')} />
+                <QuickExploreCard icon={<Droplets size={20} />} title="Salinity Map" subtitle="Ocean salinity distribution & patterns" onClick={() => setActivePage('Salinity')} />
+                <QuickExploreCard icon={<Gauge size={20} />} title="Pressure Map" subtitle="Pressure measurements at various depths" onClick={() => setActivePage('Pressure')} />
               </motion.div>
             </div>
 
-            {/* ═══ Bottom CTA Banner ═══ */}
             <motion.div
               className="rounded-2xl p-12 text-center bg-muted"
               initial={{ opacity: 0, y: 16 }}
@@ -541,7 +389,7 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
               <div className="flex justify-center gap-4">
                 <button
                   onClick={() => setActivePage('Argo Floats')}
-                  className="btn-primary"
+                  className="px-6 py-3 rounded-md font-sans font-medium text-sm bg-foreground text-background hover:bg-foreground/90 transition-all cursor-pointer"
                 >
                   Open Ocean Map
                 </button>
@@ -561,7 +409,4 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
   );
 }
 
-/* ── Utility ── */
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
+

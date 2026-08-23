@@ -28,7 +28,6 @@ function Navbar({ activePage, setActivePage }) {
         setMobileOpen(false);
     }
 
-    const isDarkCanvasBg = activePage === 'Home' && !scrolled;
 
     return (
         <header
@@ -44,8 +43,9 @@ function Navbar({ activePage, setActivePage }) {
                     className="flex items-center gap-2 group cursor-pointer"
                     aria-label="Go to Home"
                 >
-                    <span className={cn("text-2xl font-display tracking-tight", isDarkCanvasBg ? "text-white" : "text-foreground")}>
-                        Float<span className="text-periwinkle italic">CHAT</span>
+                    <span className="text-2xl tracking-tight">
+                        <span className="font-sans font-bold text-foreground">Float</span>
+                        <span className="font-display italic text-[var(--color-royal-blue)]">CHAT</span>
                     </span>
                 </button>
 
@@ -60,12 +60,12 @@ function Navbar({ activePage, setActivePage }) {
                                 className={cn(
                                     "relative flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-sans font-medium transition-colors duration-200 cursor-pointer",
                                     isActive 
-                                        ? (isDarkCanvasBg ? "text-white" : "text-foreground") 
-                                        : (isDarkCanvasBg ? "text-white/70 hover:text-white hover:bg-white/10" : "text-muted-foreground hover:text-foreground hover:bg-muted")
+                                        ? "text-foreground" 
+                                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
                                 )}
                                 title={item.name}
                             >
-                                <span className={isActive ? "text-periwinkle" : (isDarkCanvasBg ? "text-white/70" : "text-muted-foreground")}>
+                                <span className={isActive ? "text-periwinkle" : "text-muted-foreground"}>
                                     {item.icon}
                                 </span>
                                 <span>{item.name}</span>
@@ -86,8 +86,7 @@ function Navbar({ activePage, setActivePage }) {
                 {/* Mobile Hamburger */}
                 <button
                     className={cn(
-                        "md:hidden flex items-center justify-center p-2 rounded-md transition-colors cursor-pointer",
-                        isDarkCanvasBg ? "text-white hover:bg-white/10" : "text-foreground hover:bg-muted"
+                        "md:hidden flex items-center justify-center p-2 rounded-md transition-colors cursor-pointer text-foreground hover:bg-muted"
                     )}
                     onClick={() => setMobileOpen(!mobileOpen)}
                     aria-label="Toggle navigation"
