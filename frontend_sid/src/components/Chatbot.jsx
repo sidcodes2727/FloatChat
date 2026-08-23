@@ -119,7 +119,10 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data?.error || 'Failed to get response');
+            if (!res.ok) {
+                const errorMsg = data?.details ? `${data.error}: ${data.details}` : (data?.error || 'Failed to get response');
+                throw new Error(errorMsg);
+            }
             const raw = (data?.text || '').trim() || "I'm not sure how to answer that yet.";
             const reply = raw;
             setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: reply }]);

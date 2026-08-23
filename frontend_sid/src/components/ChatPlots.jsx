@@ -76,17 +76,17 @@ export default function ChatPlots({ data, onClose }) {
           .map(r => ({ x: new Date(r.time_ts).getTime(), y: Number(r[metricKey]) }))
           .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
           
-      // Average by day to smooth out high frequency data
+      // Group by exact timestamp instead of truncating to day
       const timeGroups = {};
       pts.forEach(p => {
-          const day = new Date(p.x).setHours(0,0,0,0);
-          if (!timeGroups[day]) timeGroups[day] = [];
-          timeGroups[day].push(p.y);
+          const time = p.x;
+          if (!timeGroups[time]) timeGroups[time] = [];
+          timeGroups[time].push(p.y);
       });
       
-      const smoothPts = Object.keys(timeGroups).map(day => {
-          const yVals = timeGroups[day];
-          return { x: Number(day), y: yVals.reduce((sum, v) => sum + v, 0) / yVals.length };
+      const smoothPts = Object.keys(timeGroups).map(time => {
+          const yVals = timeGroups[time];
+          return { x: Number(time), y: yVals.reduce((sum, v) => sum + v, 0) / yVals.length };
       });
       smoothPts.sort((a, b) => a.x - b.x);
       return smoothPts;
