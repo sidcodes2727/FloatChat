@@ -26,6 +26,7 @@ function normalizeMetrics(row) {
   if ('oxygen' in out) out.oxygen = coerce(out.oxygen, 0, 1000);
   if ('pressure' in out) out.pressure = coerce(out.pressure, -10, 12000);
   if ('depth' in out) out.depth = coerce(out.depth, -10, 12000);
+  if ('year' in out) out.year = out.year != null ? Number(out.year) : null;
   return out;
 }
 
@@ -43,12 +44,14 @@ app.post('/ai/chat', async (req, res) => {
     const lastUserMsg = messages.filter(m => m.role === 'user').pop();
     let extractedLocs = [];
     let wantsData = true; // Default to true
+    let extractedYear = null;
 
     if (lastUserMsg) {
       const extractPrompt = `Extract all locations mentioned in the text. Also determine if the user is asking for oceanographic data, statistics, measurements, or charts (set "wants_data" to true). If they are asking general questions (e.g. aquatic life, fishes, history) set "wants_data" to false.
 If explicit latitude and longitude are provided, extract them as "lat" and "lon" (numbers).
 If a region or place name is provided, extract it as "location_name".
-Return ONLY a JSON object in this format: {"locations": [{"location_name": string | null, "lat": number | null, "lon": number | null, "rangeDeg": number | null}], "wants_data": boolean}. If no location is found, return {"locations": [], "wants_data": false}.
+If a specific year is mentioned (e.g., 2025, 2023), extract it as "year" (number). Otherwise set "year" to null.
+Return ONLY a JSON object in this format: {"locations": [{"location_name": string | null, "lat": number | null, "lon": number | null, "rangeDeg": number | null}], "wants_data": boolean, "year": number | null}. If no location is found, return {"locations": [], "wants_data": false, "year": null}.
 
 Text: "${lastUserMsg.content}"`;
 
@@ -69,6 +72,9 @@ Text: "${lastUserMsg.content}"`;
           const parsed = JSON.parse(extractData.choices[0].message.content);
           if (parsed.wants_data !== undefined) {
              wantsData = parsed.wants_data;
+          }
+          if (parsed.year !== undefined && parsed.year !== null) {
+             extractedYear = Number(parsed.year);
           }
           // Only process locations if they actually want data
           if (wantsData) {
@@ -114,25 +120,39 @@ Text: "${lastUserMsg.content}"`;
          const lonMin = lonNum - rangeNum;
          const lonMax = lonNum + rangeNum;
 
-         const q = `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
+         let q = `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
                     FROM t1
                     WHERE latitude BETWEEN $1 AND $2
                       AND longitude BETWEEN $3 AND $4
-                      AND (temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL)
-                    ORDER BY time_ts DESC, depth ASC
-                    LIMIT 500`;
-         const dbRes = await client.query(q, [latMin, latMax, lonMin, lonMax]);
+                      AND (temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL)`;
+         let params = [latMin, latMax, lonMin, lonMax];
+         
+         if (extractedYear) {
+            q += ` AND EXTRACT(YEAR FROM time_ts) = $5`;
+            params.push(extractedYear);
+         }
+         
+         q += ` ORDER BY time_ts DESC, depth ASC LIMIT 500`;
+
+         const dbRes = await client.query(q, params);
          let rows = (dbRes.rows || []).map(normalizeMetrics);
          
          // Fallback
          if (rows.length === 0) {
-           const fallbackQ = `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
+           let fallbackQ = `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
                       FROM t1
                       WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-                        AND (temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL)
-                      ORDER BY ((latitude - $1)*(latitude - $1) + (longitude - $2)*(longitude - $2)) ASC
-                      LIMIT 100`;
-           const fallbackRes = await client.query(fallbackQ, [latNum, lonNum]);
+                        AND (temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL)`;
+           let fallbackParams = [latNum, lonNum];
+           
+           if (extractedYear) {
+             fallbackQ += ` AND EXTRACT(YEAR FROM time_ts) = $3`;
+             fallbackParams.push(extractedYear);
+           }
+           
+           fallbackQ += ` ORDER BY ((latitude - $1)*(latitude - $1) + (longitude - $2)*(longitude - $2)) ASC LIMIT 100`;
+           
+           const fallbackRes = await client.query(fallbackQ, fallbackParams);
            rows = (fallbackRes.rows || []).map(normalizeMetrics);
          }
 
@@ -148,7 +168,7 @@ Text: "${lastUserMsg.content}"`;
          if (rows.length > 0) {
            totalRowsUsed += rows.length;
            summaries.push({
-             region: { name: locationName || "Custom Coordinates", center: { lat: latNum, lon: lonNum }, rangeDeg: rangeNum },
+             region: { name: locationName || "Custom Coordinates", center: { lat: latNum, lon: lonNum }, rangeDeg: rangeNum, year: extractedYear || "All Years" },
              totals: rows.length,
              depth: stat(rows.map(r => r.depth)),
              temperature: stat(rows.map(r => r.temperature)),
@@ -168,7 +188,8 @@ Text: "${lastUserMsg.content}"`;
       systemPrompt += `\n\nContext JSON (ONLY use this if the user specifically asks for data/stats. Otherwise, IGNORE it completely):\n${JSON.stringify(llmContext)}`;
     } else if (extractedLocs.length > 0) {
       const locNames = extractedLocs.map(l => l.location_name).filter(Boolean).join(", ");
-      systemPrompt += `\n\nNo ocean data was found for the requested locations: ${locNames || 'coordinates provided'}.`;
+      const yearStr = extractedYear ? ` for the year ${extractedYear}` : '';
+      systemPrompt += `\n\nNo ocean data was found for the requested locations: ${locNames || 'coordinates provided'}${yearStr}.`;
     }
 
     const groqMessages = [{ role: 'system', content: systemPrompt }];
@@ -232,7 +253,7 @@ app.get("/latlong", async (req, res) => {
 app.get("/temperature", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, temperature FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, temperature, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -244,7 +265,7 @@ app.get("/temperature", async (req, res) => {
 app.get("/pressure", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, pressure FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND pressure IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, pressure, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND pressure IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -256,7 +277,7 @@ app.get("/pressure", async (req, res) => {
 app.get("/salinity", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, salinity FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, salinity, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -268,7 +289,7 @@ app.get("/salinity", async (req, res) => {
 app.get("/oxygen", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, oxygen FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, oxygen, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -280,7 +301,7 @@ app.get("/oxygen", async (req, res) => {
 app.get("/nitrate", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, nitrate FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND nitrate IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, nitrate, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND nitrate IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     // Nitrate is left as-is; no normalization to 0 requested
     res.json(result.rows);
@@ -292,7 +313,7 @@ app.get("/nitrate", async (req, res) => {
 app.get("/depth", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, depth FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
+      "SELECT latitude, longitude, depth, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC LIMIT 20000"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);

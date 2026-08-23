@@ -28,6 +28,8 @@ export default function OceanMap({ setActivePage, onMapClick }) {
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
   const [data, setData] = useState([]);
   const [hoverInfo, setHoverInfo] = useState(null); // {x,y,coordinate,object}
+  const [selectedYear, setSelectedYear] = useState('All');
+  const [availableYears, setAvailableYears] = useState([]);
 
   useEffect(() => {
     async function fetchData() {
@@ -50,6 +52,7 @@ export default function OceanMap({ setActivePage, onMapClick }) {
             .map((d) => ({
               ...d,
               longitude: d.longitude > 180 ? d.longitude - 360 : d.longitude,
+              year: d.year != null ? Number(d.year) : null,
             }));
 
           if (cleaned.length) {
@@ -65,6 +68,8 @@ export default function OceanMap({ setActivePage, onMapClick }) {
             }));
           }
           setData(cleaned);
+          const years = [...new Set(cleaned.map(d => d.year).filter(y => y != null))].sort((a, b) => b - a);
+          setAvailableYears(years);
         } else {
           setData(fallbackData);
         }
@@ -76,8 +81,12 @@ export default function OceanMap({ setActivePage, onMapClick }) {
     fetchData();
   }, []);
 
+  const filteredData = selectedYear === 'All' 
+    ? data 
+    : data.filter(d => d.year === selectedYear);
+
   // Ensure only valid points are passed to DeckGL to avoid runtime errors
-  const safePoints = (data || []).filter(
+  const safePoints = (filteredData || []).filter(
     (d) =>
       d &&
       Number.isFinite(Number(d.latitude)) &&
@@ -149,9 +158,21 @@ export default function OceanMap({ setActivePage, onMapClick }) {
         Back
       </button>
 
-      <div className="absolute top-3 right-3 z-10 glass-subtle rounded-lg px-3 py-1.5 flex items-center gap-1.5">
-        <Layers size={12} className="text-[var(--accent)]" />
-        <span className="text-xs text-white/60">{safePoints.length.toLocaleString()} points</span>
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+        <select
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(e.target.value === 'All' ? 'All' : Number(e.target.value))}
+          className="glass-subtle rounded-lg px-2 py-1.5 text-xs text-white/80 bg-transparent border-none outline-none cursor-pointer"
+        >
+          <option value="All" className="bg-[#040c1a]">All Years</option>
+          {availableYears.map(year => (
+            <option key={year} value={year} className="bg-[#040c1a]">{year}</option>
+          ))}
+        </select>
+        <div className="glass-subtle rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+          <Layers size={12} className="text-[var(--accent)]" />
+          <span className="text-xs text-white/60">{safePoints.length.toLocaleString()} points</span>
+        </div>
       </div>
 
       <DeckGL
@@ -187,6 +208,7 @@ export default function OceanMap({ setActivePage, onMapClick }) {
           </div>
           {hoverInfo.object ? (
             <div>
+               {hoverInfo.object.year && <div className="text-[10px] text-white/60 mb-1">Year: {hoverInfo.object.year}</div>}
                {renderMiniChart('Depth (m)', hoverInfo.object.depth, 2000, '#00d4ff')}
                {renderMiniChart('Temp (°C)', hoverInfo.object.temperature, 35, '#ff8a65')}
                {renderMiniChart('Salinity (PSU)', hoverInfo.object.salinity, 40, '#aed581')}

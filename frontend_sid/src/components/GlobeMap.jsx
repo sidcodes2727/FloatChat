@@ -9,6 +9,8 @@ export default function GlobeMap({ onMapClick }) {
     width: window.innerWidth,
     height: window.innerHeight,
   });
+  const [selectedYear, setSelectedYear] = useState('All');
+  const [availableYears, setAvailableYears] = useState([]);
   const globeRef = useRef();
 
   // Handle window resize for the globe
@@ -45,8 +47,11 @@ export default function GlobeMap({ onMapClick }) {
               // Map depth to a reasonable altitude scale for the 3D bars (0 to ~0.5)
               altitude: d.depth != null ? Math.min(0.5, Number(d.depth) / 10000) : 0.05,
               color: d.temperature != null ? getColorForTemperature(Number(d.temperature)) : '#00d4ff',
+              year: d.year != null ? Number(d.year) : null,
             }));
           setData(cleaned);
+          const years = [...new Set(cleaned.map(d => d.year).filter(y => y != null))].sort((a, b) => b - a);
+          setAvailableYears(years);
         }
       } catch (e) {
         console.error('Error fetching data for Globe Map:', e);
@@ -79,6 +84,7 @@ export default function GlobeMap({ onMapClick }) {
       ">
         <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: #00d4ff;">Float Point</div>
         <div style="font-size: 12px; color: #ccc;">
+          ${d.year ? `<b>Year:</b> ${d.year}<br/>` : ''}
           <b>Lat:</b> ${d.lat.toFixed(3)}°<br/>
           <b>Lng:</b> ${d.lng.toFixed(3)}°<br/>
           ${d.depth != null ? `<b>Depth:</b> ${Number(d.depth).toFixed(1)} m<br/>` : ''}
@@ -91,6 +97,10 @@ export default function GlobeMap({ onMapClick }) {
     `;
   }, []);
 
+  const filteredData = selectedYear === 'All' 
+    ? data 
+    : data.filter(d => d.year === selectedYear);
+
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#020a16' }}>
       <Globe
@@ -100,7 +110,7 @@ export default function GlobeMap({ onMapClick }) {
         globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
         bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
         backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
-        pointsData={data}
+        pointsData={filteredData}
         pointLat="lat"
         pointLng="lng"
         pointColor="color"
@@ -117,10 +127,22 @@ export default function GlobeMap({ onMapClick }) {
       />
       
       {/* HUD Info */}
-      <div className="absolute top-4 right-4 z-10 glass-subtle rounded-lg px-4 py-2 shadow-lg" style={{ background: 'rgba(2, 10, 22, 0.7)' }}>
-        <div className="text-xs text-white/80 font-medium">Points: {data.length.toLocaleString()}</div>
-        <div className="text-[10px] text-white/50 mt-1">Color: Temperature (Blue to Red)</div>
-        <div className="text-[10px] text-white/50">Height: Depth</div>
+      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 items-end">
+        <select
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(e.target.value === 'All' ? 'All' : Number(e.target.value))}
+          className="glass-subtle rounded-lg px-2 py-1.5 text-xs text-white/80 bg-[rgba(2,10,22,0.7)] border-none outline-none cursor-pointer"
+        >
+          <option value="All" className="bg-[#040c1a]">All Years</option>
+          {availableYears.map(year => (
+            <option key={year} value={year} className="bg-[#040c1a]">{year}</option>
+          ))}
+        </select>
+        <div className="glass-subtle rounded-lg px-4 py-2 shadow-lg" style={{ background: 'rgba(2, 10, 22, 0.7)' }}>
+          <div className="text-xs text-white/80 font-medium">Points: {filteredData.length.toLocaleString()}</div>
+          <div className="text-[10px] text-white/50 mt-1">Color: Temperature (Blue to Red)</div>
+          <div className="text-[10px] text-white/50">Height: Depth</div>
+        </div>
       </div>
 
       {error && (

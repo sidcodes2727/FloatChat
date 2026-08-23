@@ -20,14 +20,29 @@ export default function ChatPlots({ data, onClose }) {
   const salDatasets = [];
   const oxyDatasets = [];
 
-  function buildSeries(rawPoints, metricKey) {
-      if (!rawPoints) return [];
-      const pts = rawPoints
-          .map(r => ({ x: Number(r.depth), y: Number(r[metricKey]) }))
-          .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
-      pts.sort((a, b) => a.x - b.x);
-      return pts;
-  }
+   function buildSeries(rawPoints, metricKey) {
+       if (!rawPoints) return [];
+       const pts = rawPoints
+           .filter(r => r.depth != null && r[metricKey] != null)
+           .map(r => ({ x: Number(r.depth), y: Number(r[metricKey]) }))
+           .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
+           
+       // Deduplicate by depth to prevent vertical lines and jagged charts when multiple floats exist
+       const depthGroups = {};
+       pts.forEach(p => {
+           if (!depthGroups[p.x]) depthGroups[p.x] = [];
+           depthGroups[p.x].push(p.y);
+       });
+       
+       const smoothPts = Object.keys(depthGroups).map(x => {
+           const yVals = depthGroups[x];
+           const avgY = yVals.reduce((sum, val) => sum + val, 0) / yVals.length;
+           return { x: Number(x), y: avgY };
+       });
+       
+       smoothPts.sort((a, b) => a.x - b.x);
+       return smoothPts;
+   }
 
   data.forEach((summary, idx) => {
       const regionName = summary.region.name || `Region ${idx + 1}`;
@@ -49,6 +64,52 @@ export default function ChatPlots({ data, onClose }) {
           oxyDatasets.push({ name: regionName, color, data: oxySeries });
       }
   });
+
+  // Time Series Fallback (if no depth data is available but we have temporal data)
+  const timeTempDatasets = [];
+  const timeSalDatasets = [];
+  
+  function buildTimeSeries(rawPoints, metricKey) {
+      if (!rawPoints) return [];
+      const pts = rawPoints
+          .filter(r => r.time_ts != null && r[metricKey] != null)
+          .map(r => ({ x: new Date(r.time_ts).getTime(), y: Number(r[metricKey]) }))
+          .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
+          
+      // Average by day to smooth out high frequency data
+      const timeGroups = {};
+      pts.forEach(p => {
+          const day = new Date(p.x).setHours(0,0,0,0);
+          if (!timeGroups[day]) timeGroups[day] = [];
+          timeGroups[day].push(p.y);
+      });
+      
+      const smoothPts = Object.keys(timeGroups).map(day => {
+          const yVals = timeGroups[day];
+          return { x: Number(day), y: yVals.reduce((sum, v) => sum + v, 0) / yVals.length };
+      });
+      smoothPts.sort((a, b) => a.x - b.x);
+      return smoothPts;
+  }
+  
+  // Only build time series if we are missing depth data entirely, to avoid chart clutter
+  const missingDepth = tempDatasets.length === 0 && salDatasets.length === 0 && oxyDatasets.length === 0;
+  
+  if (missingDepth) {
+      data.forEach((summary, idx) => {
+          const regionName = summary.region.name || `Region ${idx + 1}`;
+          const color = COLORS[idx % COLORS.length];
+          const rawPoints = summary.points || [];
+          
+          const tempSeries = buildTimeSeries(rawPoints, 'temperature');
+          if (tempSeries.length > 0) timeTempDatasets.push({ name: regionName, color, data: tempSeries });
+          
+          const salSeries = buildTimeSeries(rawPoints, 'salinity');
+          if (salSeries.length > 0) timeSalDatasets.push({ name: regionName, color, data: salSeries });
+      });
+  }
+
+  const hasAnyCharts = tempDatasets.length > 0 || salDatasets.length > 0 || oxyDatasets.length > 0 || timeTempDatasets.length > 0 || timeSalDatasets.length > 0;
 
   return (
     <AnimatePresence>
@@ -127,7 +188,7 @@ export default function ChatPlots({ data, onClose }) {
             </div>
 
             {/* Unified Multi-Line Area Charts */}
-            {(tempDatasets.length > 0 || salDatasets.length > 0 || oxyDatasets.length > 0) && (
+            {hasAnyCharts && (
                 <div className="grid grid-cols-1 gap-4 pt-4" style={{ borderTop: '1px solid rgba(0,212,255,0.1)' }}>
                     <h4 className="text-white/60 font-semibold text-xs tracking-wider uppercase mb-2">Comparison Charts</h4>
                     
@@ -156,6 +217,28 @@ export default function ChatPlots({ data, onClose }) {
                             xLabel="Depth (m)"
                             yLabel="Oxygen"
                             icon={<Activity size={14} />}
+                        />
+                    )}
+                    
+                    {/* Time Series Alternatives if no Depth is available */}
+                    {timeTempDatasets.length > 0 && (
+                        <MultiLineChart
+                            title="Temperature vs Time"
+                            datasets={timeTempDatasets}
+                            xLabel="Time"
+                            yLabel="Temperature (°C)"
+                            icon={<Thermometer size={14} />}
+                            xScaleType="time"
+                        />
+                    )}
+                    {timeSalDatasets.length > 0 && (
+                        <MultiLineChart
+                            title="Salinity vs Time"
+                            datasets={timeSalDatasets}
+                            xLabel="Time"
+                            yLabel="Salinity (PSU)"
+                            icon={<Droplets size={14} />}
+                            xScaleType="time"
                         />
                     )}
                 </div>

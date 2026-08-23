@@ -73,6 +73,8 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
   const [error, setError] = useState(null);
   const [hoverInfo, setHoverInfo] = useState(null); // {x,y,coordinate,object}
   const [land, setLand] = useState(null); // Natural Earth land polygons
+  const [selectedYear, setSelectedYear] = useState('All');
+  const [availableYears, setAvailableYears] = useState([]);
 
   useEffect(() => {
     async function load() {
@@ -82,12 +84,14 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
         const data = await res.json();
         const cleaned = (Array.isArray(data) ? data : []).filter(
           d => d.latitude != null && d.longitude != null && Math.abs(d.latitude) <= 90 && Math.abs(d.longitude) <= 360
-        );
+        ).map(d => ({ ...d, year: d.year != null ? Number(d.year) : null }));
         setRows(cleaned);
         if (cleaned.length) {
           const avgLat = cleaned.reduce((s, d) => s + Number(d.latitude), 0) / cleaned.length;
           const avgLon = cleaned.reduce((s, d) => s + (Number(d.longitude) > 180 ? Number(d.longitude) - 360 : Number(d.longitude)), 0) / cleaned.length;
           setViewState(v => ({ ...v, latitude: avgLat, longitude: avgLon, zoom: 3 }));
+          const years = [...new Set(cleaned.map(d => d.year).filter(y => y != null))].sort((a, b) => b - a);
+          setAvailableYears(years);
         }
       } catch (e) {
         setError(e.message || 'Failed to load');
@@ -161,10 +165,14 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
     [250, 60, 160, 255]
   ]), []);
 
+  const filteredRows = useMemo(() => {
+    return selectedYear === 'All' ? rows : rows.filter(d => d.year === selectedYear);
+  }, [rows, selectedYear]);
+
   // Heatmap layer for continuous surface
   const heatmapLayer = useMemo(() => new HeatmapLayer({
     id: `${metric}-heat`,
-    data: rows,
+    data: filteredRows,
     getPosition: (d) => [Number(d.longitude) > 180 ? Number(d.longitude) - 360 : Number(d.longitude), Number(d.latitude)],
     getWeight: (d) => {
       const raw = d[metric] ?? d.value;
@@ -179,12 +187,12 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
     threshold: 0.05,
     colorRange: metric === 'salinity' ? SALINITY_RANGE : metric === 'pressure' ? PRESSURE_RANGE : TEMP_RANGE,
     weightsTextureSize: 512,
-  }), [rows, metric, viewState, TEMP_RANGE, SALINITY_RANGE, PRESSURE_RANGE]);
+  }), [filteredRows, metric, viewState, TEMP_RANGE, SALINITY_RANGE, PRESSURE_RANGE]);
 
   // Black dot markers for actual coordinates
   const pointsLayer = useMemo(() => new ScatterplotLayer({
     id: `${metric}-points`,
-    data: rows,
+    data: filteredRows,
     pickable: true,
     opacity: 0.95,
     radiusScale: 10,
@@ -209,7 +217,7 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
          onMapClick(info.coordinate[1], info.coordinate[0]);
       }
     },
-  }), [rows, metric, onMapClick]);
+  }), [filteredRows, metric, onMapClick]);
 
   // Land mask layer (overdraw on top to hide heat on land)
   const landMask = useMemo(() => {
@@ -268,6 +276,19 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
       >
         <Map mapLib={maplibregl} reuseMaps mapStyle={MAP_STYLE} attributionControl={false} {...viewState} />
       </DeckGL>
+      {/* HUD Info */}
+      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 items-end">
+        <select
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(e.target.value === 'All' ? 'All' : Number(e.target.value))}
+          className="glass-subtle rounded-lg px-2 py-1.5 text-xs text-white/80 bg-[rgba(2,10,22,0.7)] border-none outline-none cursor-pointer"
+        >
+          <option value="All" className="bg-[#040c1a]">All Years</option>
+          {availableYears.map(year => (
+            <option key={year} value={year} className="bg-[#040c1a]">{year}</option>
+          ))}
+        </select>
+      </div>
       {/* Color Legend */}
       <div
         style={{ position: 'absolute', left: 12, bottom: 12, width: 240 }}
@@ -299,6 +320,7 @@ export default function MetricMap({ metric = 'salinity', onMapClick }) {
           </div>
           {hoverInfo.object ? (
             <div>
+               {hoverInfo.object.year && <div className="text-[10px] text-white/60 mb-1">Year: {hoverInfo.object.year}</div>}
                {renderMiniChart('Depth (m)', hoverInfo.object.depth, 2000, '#00d4ff')}
                {metric === 'temperature' && renderMiniChart('Temp (°C)', hoverInfo.object.temperature, 35, '#ff8a65')}
                {metric === 'salinity' && renderMiniChart('Salinity (PSU)', hoverInfo.object.salinity, 40, '#aed581')}

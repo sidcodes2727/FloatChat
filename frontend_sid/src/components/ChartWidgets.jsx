@@ -231,7 +231,7 @@ export function StatCard({ label, value, unit, icon, color = '#00d4ff' }) {
 }
 
 /* ─── Multi-Line Chart component ─── */
-export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel = 'Value' }) {
+export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel = 'Value', xScaleType = 'linear' }) {
     const containerRef = useRef();
     const svgRef = useRef();
 
@@ -252,7 +252,7 @@ export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel
 
         svg.attr('width', width).attr('height', height);
 
-        const x = d3.scaleLinear()
+        const x = (xScaleType === 'time' ? d3.scaleTime() : d3.scaleLinear())
             .domain(d3.extent(allData, d => d.x))
             .range([margin.left, width - margin.right]);
 
@@ -286,7 +286,10 @@ export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel
         // X axis
         const xAxis = svg.append('g')
             .attr('transform', `translate(0,${height - margin.bottom})`)
-            .call(d3.axisBottom(x).ticks(5));
+            .call(d3.axisBottom(x)
+              .ticks(5)
+              .tickFormat(xScaleType === 'time' ? d3.timeFormat("%b %d") : null)
+            );
         xAxis.selectAll('text').attr('fill', 'rgba(232,244,253,0.35)').style('font-size', '9px').style('font-family', 'Inter, sans-serif');
         xAxis.selectAll('line').attr('stroke', 'rgba(255,255,255,0.06)');
         xAxis.selectAll('path').attr('stroke', 'rgba(255,255,255,0.06)');
@@ -385,6 +388,14 @@ export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel
             points.forEach((pt, i) => {
                 if (pt) {
                     focusCircles[i].attr('transform', `translate(${x(pt.x)},${y(pt.y)})`).style('display', null);
+                    
+                    let xValStr = '';
+                    if (xScaleType === 'time') {
+                        xValStr = d3.timeFormat("%b %d")(new Date(pt.x));
+                    } else {
+                        xValStr = pt.x.toFixed(1);
+                    }
+                    
                     tooltipTexts[i].text(`${datasets[i].name}: ${pt.y.toFixed(2)}`);
                 } else {
                     focusCircles[i].style('display', 'none');
