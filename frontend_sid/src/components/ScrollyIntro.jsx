@@ -64,7 +64,7 @@ export default function ScrollyIntro({ scrollContainer }) {
             >
               ◆ Phase 01 ◆
             </span>
-            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}>
+            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "'Exo 2', sans-serif" }}>
               Data Collection
             </h2>
             <p className="max-w-2xl text-lg md:text-xl text-cyan-100/80 leading-relaxed" style={{ fontFamily: "'Exo 2', sans-serif" }}>
@@ -97,7 +97,7 @@ export default function ScrollyIntro({ scrollContainer }) {
             >
               ◆ Phase 02 ◆
             </span>
-            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}>
+            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "'Exo 2', sans-serif" }}>
               Data Ingestion
             </h2>
             <p className="max-w-2xl text-lg md:text-xl text-purple-100/80 leading-relaxed" style={{ fontFamily: "'Exo 2', sans-serif" }}>
@@ -130,7 +130,7 @@ export default function ScrollyIntro({ scrollContainer }) {
             >
               ◆ Phase 03 ◆
             </span>
-            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}>
+            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "'Exo 2', sans-serif" }}>
               Interactive Response
             </h2>
             <p className="max-w-2xl text-lg md:text-xl text-green-100/80 leading-relaxed mb-12" style={{ fontFamily: "'Exo 2', sans-serif" }}>
@@ -147,7 +147,7 @@ export default function ScrollyIntro({ scrollContainer }) {
               }}
             >
               <Sparkles size={24} style={{ color: '#00f5d4' }} />
-              <span className="text-xl md:text-2xl font-bold tracking-wider" style={{ color: '#00f5d4', fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}>
+              <span className="text-xl md:text-2xl font-bold tracking-wider" style={{ color: '#00f5d4', fontFamily: "'Exo 2', sans-serif" }}>
                 AI-Powered Ocean Intelligence
               </span>
             </div>

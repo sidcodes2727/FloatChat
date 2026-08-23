@@ -49,7 +49,7 @@ function StatCounter({ value, label, suffix = '', icon, color = '#00d4ff' }) {
         <p
           className="text-3xl font-bold tracking-tight leading-none"
           style={{
-            fontFamily: "'Orbitron', 'Exo 2', sans-serif",
+            fontFamily: "'Exo 2', sans-serif",
             background: `linear-gradient(135deg, #fff 20%, ${color} 100%)`,
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
@@ -85,7 +85,7 @@ function FeatureCard({ icon, title, description, accentColor = '#00d4ff', onClic
 
       <h3
         className="text-[0.8rem] font-bold text-white mb-2 uppercase tracking-wider"
-        style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}
+        style={{ fontFamily: "'Exo 2', sans-serif" }}
       >
         {title}
       </h3>
@@ -121,7 +121,7 @@ function PhaseSection({ phase, title, titleAccent, description, image, imageAlt,
         </span>
         <h2
           className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6 leading-[1.1] tracking-tight"
-          style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}
+          style={{ fontFamily: "'Exo 2', sans-serif" }}
         >
           <span className="text-white">{title} </span>
           <span
@@ -197,7 +197,7 @@ function QuickExploreCard({ icon, title, subtitle, accentColor, onClick }) {
       </div>
       <h4
         className="text-[0.75rem] font-bold text-white mb-1 uppercase tracking-wider"
-        style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}
+        style={{ fontFamily: "'Exo 2', sans-serif" }}
       >
         {title}
       </h4>
@@ -224,7 +224,7 @@ function SectionHeader({ label, title }) {
       </span>
       <h2
         className="text-2xl md:text-3xl font-bold text-white"
-        style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}
+        style={{ fontFamily: "'Exo 2', sans-serif" }}
       >
         {title}
       </h2>
@@ -465,7 +465,7 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
           <Anchor size={28} className="mx-auto mb-4" style={{ color: '#00d4ff' }} />
           <h3
             className="text-xl md:text-2xl font-bold text-white mb-3"
-            style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}
+            style={{ fontFamily: "'Exo 2', sans-serif" }}
           >
             Ready to explore the deep?
           </h3>
