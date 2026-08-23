@@ -181,8 +181,8 @@ export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput
                             </div>
                             <div>
                                 <h3
-                                    className="text-sm font-bold text-white leading-none"
-                                    style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}
+                                    className="text-lg text-white leading-none font-bold"
+                                    style={{ fontFamily: "'Shark Heavy', sans-serif", letterSpacing: '1px' }}
                                 >
                                     floatCHAT
                                 </h3>

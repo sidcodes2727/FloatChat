@@ -58,10 +58,16 @@ export default function ScrollyIntro({ scrollContainer }) {
             className="absolute inset-0 flex flex-col items-center justify-center text-center px-6"
             style={{ y: y1 }}
           >
-            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}>
+            <span
+              className="text-[10px] font-bold uppercase tracking-[0.3em] mb-4 block"
+              style={{ color: '#00f5d4', fontFamily: "'Exo 2', sans-serif" }}
+            >
+              ◆ Phase 01 ◆
+            </span>
+            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}>
               Data Collection
             </h2>
-            <p className="max-w-2xl text-lg md:text-xl text-cyan-100/80 leading-relaxed font-medium">
+            <p className="max-w-2xl text-lg md:text-xl text-cyan-100/80 leading-relaxed" style={{ fontFamily: "'Exo 2', sans-serif" }}>
               Thousands of autonomous Argo floats patrol the deep ocean. They continuously collect real-time, critical data on temperature, salinity, and pressure from beneath the waves.
             </p>
           </motion.div>
@@ -85,10 +91,16 @@ export default function ScrollyIntro({ scrollContainer }) {
             className="absolute inset-0 flex flex-col items-center justify-center text-center px-6"
             style={{ y: y2 }}
           >
-            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}>
+            <span
+              className="text-[10px] font-bold uppercase tracking-[0.3em] mb-4 block"
+              style={{ color: '#00f5d4', fontFamily: "'Exo 2', sans-serif" }}
+            >
+              ◆ Phase 02 ◆
+            </span>
+            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}>
               Data Ingestion
             </h2>
-            <p className="max-w-2xl text-lg md:text-xl text-purple-100/80 leading-relaxed font-medium">
+            <p className="max-w-2xl text-lg md:text-xl text-purple-100/80 leading-relaxed" style={{ fontFamily: "'Exo 2', sans-serif" }}>
               Every data point collected is instantly ingested into our database, securely storing the ocean's metrics for real-time access and AI analysis.
             </p>
           </motion.div>
@@ -112,24 +124,30 @@ export default function ScrollyIntro({ scrollContainer }) {
             className="absolute inset-0 flex flex-col items-center justify-center text-center px-6"
             style={{ y: y3 }}
           >
-            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}>
+            <span
+              className="text-[10px] font-bold uppercase tracking-[0.3em] mb-4 block"
+              style={{ color: '#00f5d4', fontFamily: "'Exo 2', sans-serif" }}
+            >
+              ◆ Phase 03 ◆
+            </span>
+            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}>
               Interactive Response
             </h2>
-            <p className="max-w-2xl text-lg md:text-xl text-green-100/80 leading-relaxed font-medium mb-12">
+            <p className="max-w-2xl text-lg md:text-xl text-green-100/80 leading-relaxed mb-12" style={{ fontFamily: "'Exo 2', sans-serif" }}>
               Query the ocean in real-time. Our interactive AI dashboard brings the deep sea directly to your screen with beautiful, insightful visualizations.
             </p>
 
             <div
               className="inline-flex items-center gap-3 px-8 py-4 rounded-full mt-8"
               style={{
-                background: 'rgba(0, 212, 255, 0.1)',
-                border: '1px solid rgba(0, 212, 255, 0.3)',
-                boxShadow: '0 0 40px rgba(0, 212, 255, 0.2)',
+                background: 'linear-gradient(135deg, rgba(0, 245, 212, 0.1), rgba(0, 212, 255, 0.08))',
+                border: '1px solid rgba(0, 245, 212, 0.3)',
+                boxShadow: '0 0 40px rgba(0, 245, 212, 0.15), 0 0 80px rgba(0, 212, 255, 0.08)',
                 backdropFilter: 'blur(12px)',
               }}
             >
-              <Sparkles size={24} style={{ color: '#00d4ff' }} />
-              <span className="text-xl md:text-2xl font-bold tracking-wide" style={{ color: '#00d4ff', fontFamily: "'Space Grotesk', Inter, sans-serif" }}>
+              <Sparkles size={24} style={{ color: '#00f5d4' }} />
+              <span className="text-xl md:text-2xl font-bold tracking-wider" style={{ color: '#00f5d4', fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}>
                 AI-Powered Ocean Intelligence
               </span>
             </div>
@@ -147,7 +165,7 @@ export default function ScrollyIntro({ scrollContainer }) {
           >
             <ChevronDown size={24} className="text-white/80 drop-shadow-md" />
           </motion.div>
-          <span className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-semibold drop-shadow-md">Scroll</span>
+          <span className="text-[10px] uppercase tracking-[0.25em] text-white/80 font-bold drop-shadow-md" style={{ fontFamily: "'Exo 2', sans-serif" }}>Scroll</span>
         </motion.div>
 
         {/* Progress Bar at very bottom */}
@@ -156,7 +174,7 @@ export default function ScrollyIntro({ scrollContainer }) {
             className="h-full"
             style={{
               width: useTransform(scrollYProgress, [0, 1], ['0%', '100%']),
-              background: 'linear-gradient(90deg, #00d4ff, #7c3aed, #22c55e)'
+              background: 'linear-gradient(90deg, #00f5d4, #00d4ff, #7c3aed, #22c55e)'
             }}
           />
         </div>

@@ -3,9 +3,13 @@ import { motion } from 'framer-motion';
 import {
   MapPin, Waves, BarChart3, Bot, Thermometer, Droplets,
   Gauge, ArrowRight, Sparkles, Globe, Database, Activity,
-  ChevronRight, Zap, Shield, TrendingUp
+  ChevronRight, Anchor, Compass, Navigation
 } from 'lucide-react';
-import ScrollyIntro from './ScrollyIntro';
+
+import imgArgo from '../assets/argo-buoy.png';
+import imgDatabase from '../assets/database-ingestion.jpg';
+import imgDashboard from '../assets/dashboard-ui.png';
+import bgImage from '../assets/argo-ocean-bg.jpg';
 
 /* ─── Animated counter hook ─── */
 function useCounter(target, duration = 2000) {
@@ -32,12 +36,12 @@ function StatCounter({ value, label, suffix = '', icon, color = '#00d4ff' }) {
   return (
     <motion.div
       className="stat-card flex flex-col gap-3"
-      whileHover={{ scale: 1.02, y: -2 }}
+      whileHover={{ y: -3 }}
       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
     >
       <div
-        className="w-9 h-9 rounded-xl flex items-center justify-center"
-        style={{ background: `${color}18`, border: `1px solid ${color}25` }}
+        className="w-10 h-10 rounded-xl flex items-center justify-center"
+        style={{ background: `${color}12`, border: `1px solid ${color}20` }}
       >
         <span style={{ color }}>{icon}</span>
       </div>
@@ -45,8 +49,8 @@ function StatCounter({ value, label, suffix = '', icon, color = '#00d4ff' }) {
         <p
           className="text-3xl font-bold tracking-tight leading-none"
           style={{
-            fontFamily: "'Space Grotesk', Inter, sans-serif",
-            background: `linear-gradient(135deg, #fff 0%, ${color} 100%)`,
+            fontFamily: "'Orbitron', 'Exo 2', sans-serif",
+            background: `linear-gradient(135deg, #fff 20%, ${color} 100%)`,
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
@@ -54,111 +58,124 @@ function StatCounter({ value, label, suffix = '', icon, color = '#00d4ff' }) {
         >
           {isString ? value : num.toLocaleString()}{suffix}
         </p>
-        <p className="text-xs mt-1.5 font-medium" style={{ color: 'rgba(232,244,253,0.45)' }}>{label}</p>
+        <p className="text-xs mt-1.5 font-semibold uppercase tracking-wider" style={{ color: 'rgba(232,244,253,0.4)', fontFamily: "'Exo 2', sans-serif" }}>{label}</p>
       </div>
     </motion.div>
   );
 }
 
 /* ─── Feature card ─── */
-function FeatureCard({ icon, title, description, delay = 0, accentColor = '#00d4ff' }) {
+function FeatureCard({ icon, title, description, accentColor = '#00d4ff', onClick }) {
   return (
     <motion.div
-      className="card-premium p-6 group cursor-default"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: delay / 1000 + 0.1, duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+      className="card-premium p-6 group cursor-pointer"
       whileHover={{ y: -4 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      onClick={onClick}
     >
-      {/* Icon */}
       <div
-        className="w-11 h-11 rounded-xl flex items-center justify-center mb-4"
+        className="w-12 h-12 rounded-xl flex items-center justify-center mb-5"
         style={{
-          background: `${accentColor}14`,
-          border: `1px solid ${accentColor}22`,
-          boxShadow: `0 0 20px ${accentColor}10`,
+          background: `${accentColor}10`,
+          border: `1px solid ${accentColor}20`,
         }}
       >
         <span style={{ color: accentColor }}>{icon}</span>
       </div>
 
-      <h3 className="text-base font-semibold text-white mb-2" style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}>
+      <h3
+        className="text-[0.8rem] font-bold text-white mb-2 uppercase tracking-wider"
+        style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}
+      >
         {title}
       </h3>
-      <p className="text-sm leading-relaxed" style={{ color: 'rgba(232,244,253,0.5)' }}>
+      <p className="text-sm leading-relaxed mb-4" style={{ color: 'rgba(232,244,253,0.5)', fontFamily: "'Exo 2', sans-serif" }}>
         {description}
       </p>
 
-      {/* Hover arrow */}
-      <div className="flex items-center gap-1 mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <span className="text-xs font-medium" style={{ color: accentColor }}>Learn more</span>
+      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: accentColor, fontFamily: "'Exo 2', sans-serif" }}>Explore</span>
         <ChevronRight size={12} style={{ color: accentColor }} />
       </div>
-
-      {/* Glow spot */}
-      <div
-        className="absolute -bottom-10 -right-10 w-24 h-24 rounded-full pointer-events-none"
-        style={{ background: `radial-gradient(circle, ${accentColor}08, transparent 70%)` }}
-      />
     </motion.div>
   );
 }
 
-/* ─── Steps ─── */
-function StepItem({ number, title, description, isLast = false }) {
+/* ─── Phase Section (split layout: text + image) ─── */
+function PhaseSection({ phase, title, titleAccent, description, image, imageAlt, reverse = false, delay = 0 }) {
   return (
-    <div className="flex-1 flex flex-col md:flex-row items-start gap-0 group">
-      <div className="flex flex-col md:flex-row items-center gap-0 flex-1">
-        {/* Step circle */}
-        <div className="relative flex flex-col items-center">
-          <div
-            className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold relative z-10"
+    <motion.section
+      className={`flex flex-col ${reverse ? 'md:flex-row-reverse' : 'md:flex-row'} items-center gap-10 md:gap-16 py-16 md:py-24`}
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.6, delay: delay * 0.1, ease: [0.4, 0, 0.2, 1] }}
+    >
+      {/* Text side */}
+      <div className="flex-1 max-w-lg">
+        <span
+          className="text-[10px] font-bold uppercase tracking-[0.3em] mb-4 block"
+          style={{ color: 'rgba(0, 212, 255, 0.6)', fontFamily: "'Exo 2', sans-serif" }}
+        >
+          {phase}
+        </span>
+        <h2
+          className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6 leading-[1.1] tracking-tight"
+          style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}
+        >
+          <span className="text-white">{title} </span>
+          <span
             style={{
-              background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 212, 255, 0.08))',
-              border: '1.5px solid rgba(0, 212, 255, 0.3)',
-              color: '#00d4ff',
-              fontFamily: "'Space Grotesk', Inter, sans-serif",
-              boxShadow: '0 0 16px rgba(0, 212, 255, 0.15)',
+              fontStyle: 'italic',
+              fontFamily: "'Exo 2', sans-serif",
+              fontWeight: 300,
+              background: 'linear-gradient(135deg, #38e8ff, #00b4d8)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
             }}
           >
-            {number}
-          </div>
-        </div>
+            {titleAccent}
+          </span>
+        </h2>
+        <p
+          className="text-base md:text-lg leading-relaxed"
+          style={{ color: 'rgba(232, 244, 253, 0.55)', fontFamily: "'Exo 2', sans-serif" }}
+        >
+          {description}
+        </p>
+      </div>
 
-        {/* Connector line */}
-        {!isLast && (
-          <div
-            className="hidden md:block flex-1 h-px mx-4"
-            style={{ background: 'linear-gradient(90deg, rgba(0,212,255,0.3), rgba(0,212,255,0.05))' }}
+      {/* Image side */}
+      <div className="flex-1 max-w-lg w-full">
+        <motion.div
+          className="rounded-2xl overflow-hidden"
+          style={{
+            border: '1px solid rgba(0, 212, 255, 0.1)',
+            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.4)',
+          }}
+          whileHover={{ scale: 1.02 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+        >
+          <img
+            src={image}
+            alt={imageAlt}
+            className="w-full h-auto object-cover"
+            style={{ display: 'block' }}
           />
-        )}
+        </motion.div>
       </div>
-      {/* Text below in mobile, beside in desktop */}
-      <div className="mt-3 md:mt-0 md:hidden text-center px-2">
-        <h4 className="text-sm font-semibold text-white mb-1">{title}</h4>
-        <p className="text-xs leading-relaxed" style={{ color: 'rgba(232,244,253,0.45)' }}>{description}</p>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Step labels (desktop only, separate row) ─── */
-function StepLabel({ title, description }) {
-  return (
-    <div className="flex-1 text-center px-2">
-      <h4 className="text-sm font-semibold text-white mb-1" style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}>{title}</h4>
-      <p className="text-xs leading-relaxed" style={{ color: 'rgba(232,244,253,0.45)' }}>{description}</p>
-    </div>
+    </motion.section>
   );
 }
 
 /* ─── Quick Explore Card ─── */
-function QuickExploreCard({ icon, title, subtitle, accentColor, onClick, bgClass }) {
+function QuickExploreCard({ icon, title, subtitle, accentColor, onClick }) {
   return (
     <motion.button
       onClick={onClick}
       className="card-premium p-5 text-left group w-full"
-      whileHover={{ scale: 1.02, y: -3 }}
+      whileHover={{ y: -3 }}
       whileTap={{ scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
     >
@@ -166,41 +183,61 @@ function QuickExploreCard({ icon, title, subtitle, accentColor, onClick, bgClass
         <div
           className="w-10 h-10 rounded-xl flex items-center justify-center"
           style={{
-            background: `${accentColor}15`,
-            border: `1px solid ${accentColor}25`,
+            background: `${accentColor}10`,
+            border: `1px solid ${accentColor}20`,
           }}
         >
           <span style={{ color: accentColor }}>{icon}</span>
         </div>
         <ArrowRight
           size={15}
-          className="transition-all duration-200 group-hover:translate-x-1"
-          style={{ color: accentColor, opacity: 0.5 }}
+          className="transition-transform duration-200 group-hover:translate-x-1"
+          style={{ color: accentColor, opacity: 0.4 }}
         />
       </div>
-      <h4 className="text-sm font-semibold text-white mb-1" style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}>{title}</h4>
-      <p className="text-xs" style={{ color: 'rgba(232,244,253,0.45)' }}>{subtitle}</p>
-
-      {/* Bottom glow line on hover */}
-      <div
-        className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-        style={{ background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)` }}
-      />
+      <h4
+        className="text-[0.75rem] font-bold text-white mb-1 uppercase tracking-wider"
+        style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}
+      >
+        {title}
+      </h4>
+      <p className="text-xs" style={{ color: 'rgba(232,244,253,0.45)', fontFamily: "'Exo 2', sans-serif" }}>{subtitle}</p>
     </motion.button>
   );
 }
 
-/* ─── Floating orb decoration ─── */
-function Orb({ size, color, style }) {
+/* ─── Section Header ─── */
+function SectionHeader({ label, title }) {
+  return (
+    <motion.div
+      className="text-center mb-10"
+      initial={{ opacity: 0, y: 12 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-60px' }}
+      transition={{ duration: 0.5 }}
+    >
+      <span
+        className="text-[10px] font-bold uppercase tracking-[0.25em] mb-3 block"
+        style={{ color: 'rgba(0, 212, 255, 0.6)', fontFamily: "'Exo 2', sans-serif" }}
+      >
+        {label}
+      </span>
+      <h2
+        className="text-2xl md:text-3xl font-bold text-white"
+        style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}
+      >
+        {title}
+      </h2>
+    </motion.div>
+  );
+}
+
+/* ─── Thin divider ─── */
+function Divider() {
   return (
     <div
-      className="hero-orb pointer-events-none select-none"
-      style={{
-        width: size,
-        height: size,
-        background: color,
-        ...style,
-      }}
+      className="w-full h-px"
+      style={{ background: 'linear-gradient(90deg, transparent, rgba(0,212,255,0.12), transparent)' }}
     />
   );
 }
@@ -208,346 +245,254 @@ function Orb({ size, color, style }) {
 /* ─── Main Home ─── */
 export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
   return (
-    <div className="flex-1 relative bg-[#040c1a]">
-      {/* ═══ SCROLLYTELLING INTRO ═══ */}
-      <ScrollyIntro scrollContainer={mainScrollRef} />
+    <div className="flex-1 relative" style={{ background: 'var(--bg)' }}>
 
-      {/* Background orbs */}
-      <Orb
-        size="600px"
-        color="radial-gradient(circle, rgba(0,212,255,0.06), transparent 70%)"
-        style={{ top: '-100px', left: '50%', transform: 'translateX(-50%)', animation: 'orb-float 8s ease-in-out infinite' }}
-      />
-      <Orb
-        size="400px"
-        color="radial-gradient(circle, rgba(124,58,237,0.05), transparent 70%)"
-        style={{ top: '200px', right: '-100px', animation: 'orb-float 10s ease-in-out infinite reverse' }}
-      />
-      <Orb
-        size="300px"
-        color="radial-gradient(circle, rgba(0,212,255,0.04), transparent 70%)"
-        style={{ bottom: '200px', left: '-80px', animation: 'orb-float 7s ease-in-out infinite' }}
-      />
+      {/* ═══ HERO ═══ */}
+      <section
+        className="relative flex flex-col justify-end overflow-hidden w-full"
+        style={{
+          minHeight: 'calc(100vh - 65px)',
+          backgroundImage: `url(${bgImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        {/* Dark overlay at the bottom for text readability */}
+        <div
+          className="absolute inset-0 pointer-events-none z-0"
+          style={{
+            background: 'linear-gradient(to top, rgba(4, 12, 24, 1) 0%, rgba(4, 12, 24, 0.4) 40%, transparent 100%)',
+          }}
+        />
 
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-10 md:py-14 relative z-10">
-
-        {/* ═══ HERO ═══ */}
-        <motion.div
-          className="text-center mb-16"
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
-        >
-          {/* Badge */}
+        <div className="relative z-10 w-full px-5 md:px-10 pb-12 flex flex-col items-start text-left">
+          
           <motion.div
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-7"
-            style={{
-              background: 'rgba(0, 212, 255, 0.08)',
-              border: '1px solid rgba(0, 212, 255, 0.2)',
-              backdropFilter: 'blur(8px)',
-            }}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.1, duration: 0.4 }}
-          >
-            <Sparkles size={12} style={{ color: '#00d4ff' }} />
-            <span className="text-xs font-semibold tracking-wide" style={{ color: '#00d4ff' }}>
-              AI-Powered Ocean Intelligence
-            </span>
-            <span
-              className="text-[10px] px-1.5 py-0.5 rounded-full font-bold"
-              style={{ background: 'rgba(0,212,255,0.15)', color: '#38e8ff' }}
-            >
-              LIVE
-            </span>
-          </motion.div>
-
-          {/* Headline */}
-          <motion.h1
-            className="text-5xl md:text-6xl lg:text-7xl font-bold mb-5 tracking-tight leading-[1.05]"
-            style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}
-            initial={{ opacity: 0, y: 16 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.55, ease: [0.4, 0, 0.2, 1] }}
+            transition={{ duration: 0.8, ease: 'easeOut' }}
+            className="w-full"
           >
-            <span className="text-white">Explore the </span>
-            <span
+            {/* The giant text like "EVASION" */}
+            <h1
+              className="font-normal tracking-wide uppercase select-none w-full leading-none"
               style={{
-                background: 'linear-gradient(135deg, #38e8ff 0%, #00d4ff 45%, #0099cc 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
+                fontFamily: "'Findet Nemo', sans-serif",
+                fontSize: 'clamp(3rem, 10vw, 8rem)',
+                color: '#ffffff',
+                textShadow: '0 10px 40px rgba(0,0,0,0.5)',
               }}
             >
-              Depths
-            </span>
-            <br />
-            <span className="text-white">of Our </span>
-            <span
-              style={{
-                background: 'linear-gradient(135deg, #a78bfa 0%, #7c3aed 55%, #5b21b6 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
-              Oceans
-            </span>
-          </motion.h1>
-
-          {/* Sub */}
-          <motion.p
-            className="text-base md:text-lg mb-10 max-w-xl mx-auto leading-relaxed"
-            style={{ color: 'rgba(232,244,253,0.55)' }}
+              FLOATCHAT
+            </h1>
+            <p className="mt-4 max-w-2xl text-lg md:text-xl font-medium tracking-wide" style={{ color: 'rgba(232, 244, 253, 0.85)', fontFamily: "'Findet Nemo', sans-serif" }}>
+              AI-Powered Interactive Visualization from Autonomous ARGO Floats.
+            </p>
+          </motion.div>
+          
+          <motion.div
+            className="mt-8 flex items-center justify-start gap-4 flex-wrap"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.25, duration: 0.5 }}
-          >
-            Interactive visualization from thousands of autonomous ARGO floats.
-            Analyze temperature, salinity, pressure, and depth across the globe — powered by AI.
-          </motion.p>
-
-          {/* CTAs */}
-          <motion.div
-            className="flex items-center justify-center gap-3 flex-wrap"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.32, duration: 0.45 }}
+            transition={{ delay: 0.4, duration: 0.6 }}
           >
             <button
               onClick={() => setActivePage('Argo Floats')}
-              className="inline-flex items-center gap-2 px-6 py-3 btn-primary rounded-xl text-sm"
+              className="inline-flex items-center gap-2 px-8 py-4 btn-primary rounded-full text-base font-semibold shadow-xl hover:shadow-2xl transition-all"
+              style={{ fontFamily: "'Findet Nemo', sans-serif" }}
             >
-              <MapPin size={16} />
+              <Compass size={18} />
               Explore Ocean Map
-              <ArrowRight size={14} className="ml-1" />
             </button>
             <button
               onClick={() => setChatOpen?.(true)}
-              className="btn-outline inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm"
-              aria-label="Open chatbot assistant"
+              className="inline-flex items-center gap-2 px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-full text-base font-semibold backdrop-blur-md border border-white/20 transition-all shadow-xl"
+              style={{ fontFamily: "'Findet Nemo', sans-serif" }}
             >
-              <Bot size={16} />
+              <Bot size={18} />
               Ask AI Assistant
             </button>
           </motion.div>
-        </motion.div>
-
-        {/* ═══ STATS ═══ */}
-        <motion.div
-          className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-16"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.5 }}
-        >
-          <StatCounter value={3847}  label="Active Floats"   icon={<Activity size={18} />} color="#00d4ff" />
-          <StatCounter value={12}    label="Ocean Regions"   icon={<Globe size={18} />}    color="#7c3aed" />
-          <StatCounter value="2.4M"  label="Data Points"     icon={<Database size={18} />} color="#f97316" />
-          <StatCounter value={147}   label="Countries"       icon={<MapPin size={18} />}   color="#22c55e" />
-        </motion.div>
-
-        {/* ═══ FEATURES ═══ */}
-        <div className="mb-16">
-          <motion.div
-            className="text-center mb-8"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5, duration: 0.4 }}
-          >
-            <span
-              className="text-xs font-semibold uppercase tracking-widest mb-2 block"
-              style={{ color: '#00d4ff' }}
-            >
-              Capabilities
-            </span>
-            <h2
-              className="text-2xl font-bold text-white"
-              style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}
-            >
-              Platform Features
-            </h2>
-          </motion.div>
-
-          <div className="grid md:grid-cols-3 gap-4">
-            <FeatureCard
-              icon={<Waves size={20} />}
-              title="Ocean Depth Profiles"
-              description="Visualize ocean depth measurements with color-coded markers. Explore vertical profiles of temperature, salinity, and oxygen at any coordinate."
-              delay={0}
-              accentColor="#00d4ff"
-            />
-            <FeatureCard
-              icon={<BarChart3 size={20} />}
-              title="Advanced Analytics"
-              description="Comprehensive analytics dashboard with real-time data processing. Monitor trends, detect anomalies, and compare oceanographic metrics across regions."
-              delay={100}
-              accentColor="#7c3aed"
-            />
-            <FeatureCard
-              icon={<Globe size={20} />}
-              title="Global Coverage"
-              description="Explore oceanographic data from every major ocean basin. Complete coverage from the Arctic to the Antarctic with thousands of active measurement points."
-              delay={200}
-              accentColor="#f97316"
-            />
-          </div>
         </div>
+      </section>
 
-        {/* ═══ HOW IT WORKS ═══ */}
-        <motion.div
-          className="card-premium p-8 mb-16"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6, duration: 0.5 }}
-        >
-          <div className="text-center mb-8">
-            <span
-              className="text-xs font-semibold uppercase tracking-widest mb-2 block"
-              style={{ color: '#00d4ff' }}
-            >
-              Workflow
-            </span>
-            <h2
-              className="text-2xl font-bold text-white"
-              style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}
-            >
-              How It Works
-            </h2>
-          </div>
-
-          {/* Steps — circles + lines */}
-          <div className="flex flex-col md:flex-row items-center gap-3 md:gap-0 mb-6">
-            {[
-              { n: '01', title: 'Select Region', desc: 'Click any point on the interactive map or enter coordinates to choose your area of interest.' },
-              { n: '02', title: 'Analyze Data', desc: 'View depth profiles, temperature gradients, salinity distributions and pressure readings.' },
-              { n: '03', title: 'AI Insights', desc: 'Ask floatCHAT to summarize patterns, detect anomalies, or compare different ocean regions.' },
-            ].map((step, i, arr) => (
-              <React.Fragment key={step.n}>
-                <div className="flex-1 flex flex-col items-center text-center px-4">
-                  <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm mb-4"
-                    style={{
-                      background: 'linear-gradient(135deg, rgba(0,212,255,0.15), rgba(0,212,255,0.06))',
-                      border: '1.5px solid rgba(0,212,255,0.3)',
-                      color: '#00d4ff',
-                      fontFamily: "'Space Grotesk', Inter, sans-serif",
-                      boxShadow: '0 0 20px rgba(0,212,255,0.12)',
-                    }}
-                  >
-                    {step.n}
-                  </div>
-                  <h4 className="text-sm font-semibold text-white mb-1.5" style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}>
-                    {step.title}
-                  </h4>
-                  <p className="text-xs leading-relaxed" style={{ color: 'rgba(232,244,253,0.45)' }}>
-                    {step.desc}
-                  </p>
-                </div>
-                {i < arr.length - 1 && (
-                  <div
-                    className="hidden md:block w-16 h-px shrink-0"
-                    style={{ background: 'linear-gradient(90deg, rgba(0,212,255,0.3), rgba(0,212,255,0.1))' }}
-                  />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* ═══ QUICK EXPLORE ═══ */}
-        <div className="mb-4">
+      {/* ═══ STATS BAR ═══ */}
+      <section style={{ background: 'rgba(4,12,24,0.6)', borderTop: '1px solid rgba(0,212,255,0.06)', borderBottom: '1px solid rgba(0,212,255,0.06)' }}>
+        <div className="max-w-6xl mx-auto px-5 md:px-10 py-8">
           <motion.div
-            className="text-center mb-8"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.7, duration: 0.4 }}
-          >
-            <span
-              className="text-xs font-semibold uppercase tracking-widest mb-2 block"
-              style={{ color: '#00d4ff' }}
-            >
-              Quick Access
-            </span>
-            <h2
-              className="text-2xl font-bold text-white"
-              style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}
-            >
-              Explore by Metric
-            </h2>
-          </motion.div>
-
-          <motion.div
-            className="grid md:grid-cols-3 gap-4"
+            className="grid grid-cols-2 md:grid-cols-4 gap-4"
             initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.75, duration: 0.45 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
           >
-            <QuickExploreCard
-              icon={<Thermometer size={18} />}
-              title="Temperature Map"
-              subtitle="Sea surface & depth temperature gradients"
-              accentColor="#f97316"
-              onClick={() => setActivePage('Temperature')}
-            />
-            <QuickExploreCard
-              icon={<Droplets size={18} />}
-              title="Salinity Map"
-              subtitle="Ocean salinity distribution & patterns"
-              accentColor="#7c3aed"
-              onClick={() => setActivePage('Salinity')}
-            />
-            <QuickExploreCard
-              icon={<Gauge size={18} />}
-              title="Pressure Map"
-              subtitle="Pressure measurements at various depths"
-              accentColor="#22c55e"
-              onClick={() => setActivePage('Pressure')}
-            />
+            <StatCounter value={3847}  label="Active Floats"   icon={<Activity size={18} />} color="#00d4ff" />
+            <StatCounter value={12}    label="Ocean Regions"   icon={<Globe size={18} />}    color="#7c3aed" />
+            <StatCounter value="2.4M"  label="Data Points"     icon={<Database size={18} />} color="#f97316" />
+            <StatCounter value={147}   label="Countries"       icon={<MapPin size={18} />}   color="#22c55e" />
           </motion.div>
         </div>
+      </section>
 
-        {/* ═══ Bottom CTA Banner ═══ */}
+      {/* ═══ PHASE SECTIONS (split layout) ═══ */}
+      <div className="max-w-6xl mx-auto px-5 md:px-10">
+
+        <PhaseSection
+          phase="Phase 01: Collection"
+          title="Autonomous"
+          titleAccent="Sensing"
+          description="Thousands of autonomous Argo floats patrol the deep ocean. They continuously collect real-time, critical telemetry on temperature, salinity, and pressure from beneath the waves."
+          image={imgArgo}
+          imageAlt="Argo Float collecting ocean data"
+          delay={0}
+        />
+
+        <Divider />
+
+        <PhaseSection
+          phase="Phase 02: Ingestion"
+          title="Cloud"
+          titleAccent="Processing"
+          description="Every data point collected is instantly ingested into our cloud infrastructure, securely storing the ocean's metrics for real-time access, trend analysis, and AI-powered insights."
+          image={imgDatabase}
+          imageAlt="Cloud database ingestion pipeline"
+          reverse
+          delay={1}
+        />
+
+        <Divider />
+
+        <PhaseSection
+          phase="Phase 03: Intelligence"
+          title="Interactive"
+          titleAccent="Response"
+          description="Query the ocean in real-time. Our interactive AI dashboard brings the deep sea directly to your screen with beautiful, insightful visualizations and natural-language analysis."
+          image={imgDashboard}
+          imageAlt="Interactive ocean dashboard"
+          delay={2}
+        />
+
+      </div>
+
+      <Divider />
+
+      {/* ═══ FEATURES ═══ */}
+      <section className="max-w-6xl mx-auto px-5 md:px-10 py-16 md:py-24">
+        <SectionHeader label="Capabilities" title="Platform Features" />
+
         <motion.div
-          className="mt-14 rounded-2xl p-8 text-center relative overflow-hidden"
+          className="grid md:grid-cols-3 gap-5"
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-60px' }}
+          transition={{ duration: 0.5 }}
+        >
+          <FeatureCard
+            icon={<Waves size={22} />}
+            title="Ocean Depth Profiles"
+            description="Visualize ocean depth measurements with color-coded markers. Explore vertical profiles of temperature, salinity, and oxygen at any coordinate."
+            accentColor="#00d4ff"
+            onClick={() => setActivePage('Depth Profiles')}
+          />
+          <FeatureCard
+            icon={<BarChart3 size={22} />}
+            title="Advanced Analytics"
+            description="Comprehensive analytics dashboard with real-time data processing. Monitor trends, detect anomalies, and compare oceanographic metrics."
+            accentColor="#7c3aed"
+            onClick={() => setActivePage('Depth Profiles')}
+          />
+          <FeatureCard
+            icon={<Globe size={22} />}
+            title="Global Coverage"
+            description="Explore data from every major ocean basin. Complete coverage from the Arctic to the Antarctic with thousands of active measurement points."
+            accentColor="#f97316"
+            onClick={() => setActivePage('3D Globe')}
+          />
+        </motion.div>
+      </section>
+
+      <Divider />
+
+      {/* ═══ QUICK EXPLORE ═══ */}
+      <section className="max-w-6xl mx-auto px-5 md:px-10 py-16 md:py-24">
+        <SectionHeader label="Quick Access" title="Explore by Metric" />
+
+        <motion.div
+          className="grid md:grid-cols-3 gap-5"
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-60px' }}
+          transition={{ duration: 0.5 }}
+        >
+          <QuickExploreCard
+            icon={<Thermometer size={18} />}
+            title="Temperature Map"
+            subtitle="Sea surface & depth temperature gradients"
+            accentColor="#f97316"
+            onClick={() => setActivePage('Temperature')}
+          />
+          <QuickExploreCard
+            icon={<Droplets size={18} />}
+            title="Salinity Map"
+            subtitle="Ocean salinity distribution & patterns"
+            accentColor="#7c3aed"
+            onClick={() => setActivePage('Salinity')}
+          />
+          <QuickExploreCard
+            icon={<Gauge size={18} />}
+            title="Pressure Map"
+            subtitle="Pressure measurements at various depths"
+            accentColor="#22c55e"
+            onClick={() => setActivePage('Pressure')}
+          />
+        </motion.div>
+      </section>
+
+      {/* ═══ Bottom CTA ═══ */}
+      <section className="max-w-6xl mx-auto px-5 md:px-10 pb-16 md:pb-24">
+        <motion.div
+          className="rounded-2xl p-10 text-center relative overflow-hidden"
           style={{
-            background: 'linear-gradient(135deg, rgba(0,212,255,0.07) 0%, rgba(124,58,237,0.06) 100%)',
-            border: '1px solid rgba(0,212,255,0.14)',
+            background: 'linear-gradient(135deg, rgba(0,212,255,0.05) 0%, rgba(124,58,237,0.04) 100%)',
+            border: '1px solid rgba(0,212,255,0.1)',
           }}
           initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.85, duration: 0.5 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
         >
-          {/* Glow */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(0,212,255,0.08), transparent)' }}
-          />
-          <Zap size={28} className="mx-auto mb-3" style={{ color: '#00d4ff' }} />
-          <h3 className="text-xl font-bold text-white mb-2" style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}>
+          <Anchor size={28} className="mx-auto mb-4" style={{ color: '#00d4ff' }} />
+          <h3
+            className="text-xl md:text-2xl font-bold text-white mb-3"
+            style={{ fontFamily: "'Orbitron', 'Exo 2', sans-serif" }}
+          >
             Ready to explore the deep?
           </h3>
-          <p className="text-sm mb-6" style={{ color: 'rgba(232,244,253,0.5)' }}>
+          <p className="text-sm mb-7" style={{ color: 'rgba(232,244,253,0.45)', fontFamily: "'Exo 2', sans-serif" }}>
             Thousands of data points from autonomous ARGO floats await your analysis.
           </p>
           <div className="flex items-center justify-center gap-3 flex-wrap">
             <button
               onClick={() => setActivePage('Argo Floats')}
               className="inline-flex items-center gap-2 px-6 py-3 btn-primary rounded-xl text-sm"
+              style={{ fontFamily: "'Exo 2', sans-serif" }}
             >
-              <MapPin size={15} />
+              <Compass size={15} />
               Open Ocean Map
             </button>
             <button
               onClick={() => setActivePage('Depth Profiles')}
               className="btn-outline inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm"
+              style={{ fontFamily: "'Exo 2', sans-serif" }}
             >
               <BarChart3 size={15} />
               View Depth Profiles
             </button>
           </div>
         </motion.div>
+      </section>
 
-      </div>
     </div>
   );
 }
