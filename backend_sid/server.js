@@ -1,9 +1,12 @@
 require('dotenv').config();
 const express = require("express");
 const client = require("./database/db");
+const { ChromaClient } = require('chromadb');
 const app = express();
 const port = process.env.PORT || 3001;
 const cors = require("cors");
+
+const chroma = new ChromaClient({ path: "http://localhost:8000" });
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
@@ -180,12 +183,36 @@ Text: "${lastUserMsg.content}"`;
        }
     }
 
+    // Step 3.5: Query Vector Database for domain knowledge context
+    let vectorContext = "";
+    if (lastUserMsg) {
+       try {
+           const collection = await chroma.getCollection({ name: "ocean_metadata" });
+           const results = await collection.query({
+               queryTexts: [lastUserMsg.content],
+               nResults: 2
+           });
+           
+           if (results && results.documents && results.documents[0] && results.documents[0].length > 0) {
+               vectorContext = results.documents[0].join(" ");
+               console.log("Vector DB retrieved context:", vectorContext);
+           }
+       } catch (e) {
+           console.log("Vector DB error or not running, skipping semantic context:", e.message);
+       }
+    }
+
     // Step 4: Final Chat Generation
     let systemPrompt = "You are floatCHAT — your ocean data assistant. Answer very concisely (1-2 sentences). CRITICAL RULE: NEVER mention or include ARGO temperature, salinity, oxygen, or depth statistics in your answer unless the user EXPLICITLY asks for oceanographic data, measurements, or stats. If the user asks about aquatic life, fishes, animals, geography, or history, DO NOT append any ARGO data or numbers to your response. Answer naturally without stats.";
+    
+    if (vectorContext) {
+      systemPrompt += `\n\nDomain Knowledge Context (Use this if helpful to answer the user's question): ${vectorContext}`;
+    }
+
     if (summaries.length > 0) {
       // Strip raw points so we don't blow up the LLM token limit
       const llmContext = summaries.map(({ points, ...rest }) => rest);
-      systemPrompt += `\n\nContext JSON (ONLY use this if the user specifically asks for data/stats. Otherwise, IGNORE it completely):\n${JSON.stringify(llmContext)}`;
+      systemPrompt += `\n\nData Context JSON (ONLY use this if the user specifically asks for data/stats. Otherwise, IGNORE it completely):\n${JSON.stringify(llmContext)}`;
     } else if (extractedLocs.length > 0) {
       const locNames = extractedLocs.map(l => l.location_name).filter(Boolean).join(", ");
       const yearStr = extractedYear ? ` for the year ${extractedYear}` : '';
