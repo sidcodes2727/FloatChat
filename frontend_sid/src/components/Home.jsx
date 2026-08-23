@@ -254,11 +254,19 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
         style={{ minHeight: 'calc(100vh - 65px)' }}
       >
         <video
+          ref={(el) => {
+             if (el) {
+                el.defaultMuted = true;
+                el.muted = true;
+                el.play().catch(e => console.log("Autoplay prevented", e));
+             }
+          }}
           autoPlay
           loop
           muted
           playsInline
           className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none"
+          style={{ filter: 'contrast(1.15) saturate(1.2) brightness(1.1)' }}
           src={bgVideo}
         />
         {/* Dark overlay at the bottom for text readability */}
