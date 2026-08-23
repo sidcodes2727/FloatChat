@@ -10,6 +10,7 @@ import imgArgo from '../assets/argo-buoy.png';
 import imgDatabase from '../assets/database-ingestion.jpg';
 import imgDashboard from '../assets/dashboard-ui.png';
 import bgImage from '../assets/argo-ocean-bg.jpg';
+import bgVideo from '../assets/can_u_animate_this_image_and_m.mp4';
 
 /* ─── Animated counter hook ─── */
 function useCounter(target, duration = 2000) {
@@ -250,24 +251,26 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
       {/* ═══ HERO ═══ */}
       <section
         className="relative flex flex-col justify-end overflow-hidden w-full"
-        style={{
-          minHeight: 'calc(100vh - 65px)',
-          backgroundImage: `url(${bgImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-        }}
+        style={{ minHeight: 'calc(100vh - 65px)' }}
       >
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none"
+          src={bgVideo}
+        />
         {/* Dark overlay at the bottom for text readability */}
         <div
-          className="absolute inset-0 pointer-events-none z-0"
+          className="absolute inset-0 pointer-events-none z-[1]"
           style={{
-            background: 'linear-gradient(to top, rgba(4, 12, 24, 1) 0%, rgba(4, 12, 24, 0.4) 40%, transparent 100%)',
+            background: 'linear-gradient(to top, rgba(4, 12, 24, 1) 0%, rgba(4, 12, 24, 0.6) 40%, rgba(4, 12, 24, 0.2) 100%)',
           }}
         />
 
         <div className="relative z-10 w-full px-5 md:px-10 pb-12 flex flex-col items-start text-left">
-          
+
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -290,7 +293,7 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
               AI-Powered Interactive Visualization from Autonomous ARGO Floats.
             </p>
           </motion.div>
-          
+
           <motion.div
             className="mt-8 flex items-center justify-start gap-4 flex-wrap"
             initial={{ opacity: 0 }}
@@ -327,10 +330,10 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
             viewport={{ once: true }}
             transition={{ duration: 0.5 }}
           >
-            <StatCounter value={3847}  label="Active Floats"   icon={<Activity size={18} />} color="#00d4ff" />
-            <StatCounter value={12}    label="Ocean Regions"   icon={<Globe size={18} />}    color="#7c3aed" />
-            <StatCounter value="2.4M"  label="Data Points"     icon={<Database size={18} />} color="#f97316" />
-            <StatCounter value={147}   label="Countries"       icon={<MapPin size={18} />}   color="#22c55e" />
+            <StatCounter value={3847} label="Active Floats" icon={<Activity size={18} />} color="#00d4ff" />
+            <StatCounter value={12} label="Ocean Regions" icon={<Globe size={18} />} color="#7c3aed" />
+            <StatCounter value="2.4M" label="Data Points" icon={<Database size={18} />} color="#f97316" />
+            <StatCounter value={147} label="Countries" icon={<MapPin size={18} />} color="#22c55e" />
           </motion.div>
         </div>
       </section>
