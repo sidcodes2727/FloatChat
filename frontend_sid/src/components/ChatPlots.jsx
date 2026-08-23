@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Activity, Thermometer, Droplets, Layers } from 'lucide-react';
+import { X, Activity, Thermometer, Droplets, Layers, Download } from 'lucide-react';
 import { MultiLineChart, StatCard } from './ChartWidgets';
 
 // High contrast palette for distinguishing regions on multi-line chart
@@ -111,6 +111,30 @@ export default function ChatPlots({ data, onClose }) {
 
   const hasAnyCharts = tempDatasets.length > 0 || salDatasets.length > 0 || oxyDatasets.length > 0 || timeTempDatasets.length > 0 || timeSalDatasets.length > 0;
 
+  const handleDownload = () => {
+    if (!data || data.length === 0) return;
+    
+    let csvContent = "region,latitude,longitude,time,depth,temperature,salinity,oxygen\n";
+    
+    data.forEach(summary => {
+      const regionName = summary.region.name || "Custom Region";
+      if (summary.points) {
+        summary.points.forEach(p => {
+          csvContent += `"${regionName}",${p.latitude || ''},${p.longitude || ''},${p.time_ts || ''},${p.depth || ''},${p.temperature || ''},${p.salinity || ''},${p.oxygen || ''}\n`;
+        });
+      }
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'argo_data_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <AnimatePresence>
       <motion.div
@@ -130,9 +154,19 @@ export default function ChatPlots({ data, onClose }) {
       >
         <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: '1px solid rgba(0,212,255,0.1)' }}>
             <h3 className="text-md font-bold text-white tracking-wide" style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}>Ocean Data Comparison</h3>
-            <button onClick={onClose} className="text-white/50 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-md">
-              <X size={16} />
-            </button>
+            <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleDownload} 
+                  className="flex items-center gap-1.5 text-xs text-white/80 hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-md"
+                  title="Download ASCII (CSV)"
+                >
+                  <Download size={14} />
+                  <span>Export</span>
+                </button>
+                <button onClick={onClose} className="text-white/50 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-md">
+                  <X size={16} />
+                </button>
+            </div>
         </div>
 
         <div className="p-5 space-y-8 overflow-y-auto w-full">
