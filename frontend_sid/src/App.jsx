@@ -1,14 +1,15 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from './components/navbar';
 import Chatbot from './components/Chatbot';
 import ChatPlots from './components/ChatPlots';
-import Dashboard from './components/Dashboard';
 import Home from './components/Home';
-import OceanMap from './components/OceanMap';
-import MetricMap from './components/MetricMap';
-import GlobeMap from './components/GlobeMap';
 import { Bot, X } from 'lucide-react';
+
+const Dashboard = React.lazy(() => import('./components/Dashboard'));
+const OceanMap = React.lazy(() => import('./components/OceanMap'));
+const MetricMap = React.lazy(() => import('./components/MetricMap'));
+const GlobeMap = React.lazy(() => import('./components/GlobeMap'));
 
 function OceanVizApp() {
     const [chatOpen, setChatOpen] = useState(false);
@@ -38,24 +39,26 @@ function OceanVizApp() {
                     transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
                     className={isFullScreenMap ? 'flex-1 relative overflow-hidden' : 'flex-1 relative overflow-y-auto overflow-x-hidden'}
                 >
-                    {activePage === 'Depth Profiles' && (
-                        <div
-                            className="rounded-xl mx-3 md:mx-5 my-3"
-                            style={{
-                                background: 'rgba(4, 12, 26, 0.4)',
-                                border: '1px solid rgba(0, 212, 255, 0.07)',
-                                backdropFilter: 'blur(8px)',
-                            }}
-                        >
-                            <Dashboard />
-                        </div>
-                    )}
-                    {activePage === 'Home' && <Home setActivePage={setActivePage} setChatOpen={setChatOpen} mainScrollRef={mainScrollRef} />}
-                    {activePage === 'Argo Floats' && <OceanMap setActivePage={setActivePage} onMapClick={handleMapClick} />}
-                    {activePage === 'Salinity' && <MetricMap metric="salinity" onMapClick={handleMapClick} />}
-                    {activePage === 'Temperature' && <MetricMap metric="temperature" onMapClick={handleMapClick} />}
-                    {activePage === 'Pressure' && <MetricMap metric="pressure" onMapClick={handleMapClick} />}
-                    {activePage === '3D Globe' && <GlobeMap onMapClick={handleMapClick} />}
+                    <Suspense fallback={<div className="flex h-full items-center justify-center text-sm font-semibold tracking-wider text-[#00d4ff]/60 uppercase">Loading Module...</div>}>
+                        {activePage === 'Depth Profiles' && (
+                            <div
+                                className="rounded-xl mx-3 md:mx-5 my-3"
+                                style={{
+                                    background: 'rgba(4, 12, 26, 0.4)',
+                                    border: '1px solid rgba(0, 212, 255, 0.07)',
+                                    backdropFilter: 'blur(8px)',
+                                }}
+                            >
+                                <Dashboard />
+                            </div>
+                        )}
+                        {activePage === 'Home' && <Home setActivePage={setActivePage} setChatOpen={setChatOpen} mainScrollRef={mainScrollRef} />}
+                        {activePage === 'Argo Floats' && <OceanMap setActivePage={setActivePage} onMapClick={handleMapClick} />}
+                        {activePage === 'Salinity' && <MetricMap metric="salinity" onMapClick={handleMapClick} />}
+                        {activePage === 'Temperature' && <MetricMap metric="temperature" onMapClick={handleMapClick} />}
+                        {activePage === 'Pressure' && <MetricMap metric="pressure" onMapClick={handleMapClick} />}
+                        {activePage === '3D Globe' && <GlobeMap onMapClick={handleMapClick} />}
+                    </Suspense>
                 </motion.div>
             </AnimatePresence>
 

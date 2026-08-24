@@ -314,6 +314,29 @@ body::before {
   color: var(--text);
 }
 
+.hero-btn-shimmer {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+  transform: skewX(-20deg);
+  animation: shimmer-btn 3s infinite;
+  pointer-events: none;
+}
+
+@keyframes shimmer-btn {
+  0% { left: -100%; }
+  20% { left: 200%; }
+  100% { left: 200%; }
+}
+
 /* ============================================
    INPUT FIELDS
    ============================================ */
@@ -601,7 +624,7 @@ body::before {
   background: linear-gradient(270deg,
       #38e8ff,
       #00d4ff,
-      #7c3aed,
+      #0082cc,
       #00d4ff,
       #38e8ff);
   background-size: 400% 400%;
