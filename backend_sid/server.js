@@ -192,10 +192,13 @@ app.get("/everything", async (req, res) => {
 
 app.get("/latlong", async (req, res) => {
   const { lat, lon } = req.query;
+  const latNum = parseFloat(lat);
+  const lonNum = parseFloat(lon);
+  let dbLon = lonNum < 0 ? lonNum + 360 : lonNum;
   try {
     const result = await client.query(
       "SELECT * FROM t1 WHERE latitude=$1 AND longitude=$2 ORDER BY time_ts ASC, depth ASC LIMIT 50",
-      [lat, lon]
+      [latNum, dbLon]
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -284,15 +287,17 @@ app.get("/profiles", async (req, res) => {
     const latNum = parseFloat(lat);
     const lonNum = parseFloat(lon);
     const rangeNum = parseFloat(rangeDeg);
+    let dbLon = lonNum < 0 ? lonNum + 360 : lonNum;
 
     if (!Number.isFinite(latNum) || !Number.isFinite(lonNum) || !Number.isFinite(rangeNum)) {
       return res.status(400).json({ error: "lat, lon, rangeDeg (numbers) are required" });
     }
 
-    const latMin = latNum - rangeNum;
-    const latMax = latNum + rangeNum;
-    const lonMin = lonNum - rangeNum;
-    const lonMax = lonNum + rangeNum;
+    const effectiveRange = rangeNum === 0 ? 0.01 : rangeNum;
+    const latMin = latNum - effectiveRange;
+    const latMax = latNum + effectiveRange;
+    const lonMin = dbLon - effectiveRange;
+    const lonMax = dbLon + effectiveRange;
 
     const result = await client.query(
       `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts

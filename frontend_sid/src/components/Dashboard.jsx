@@ -13,8 +13,8 @@ function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const [lat, setLat] = useState(0);
-    const [lon, setLon] = useState(0);
+    const [lat, setLat] = useState('0');
+    const [lon, setLon] = useState('0');
     const [rangeDeg, setRangeDeg] = useState('');
 
     useEffect(() => {
@@ -36,16 +36,18 @@ function Dashboard() {
     }, []);
 
     useEffect(() => {
-        const rangeNum = typeof rangeDeg === 'string' ? parseFloat(rangeDeg) : rangeDeg;
-        const hasFinite = Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(rangeNum);
+        const latNum = parseFloat(lat);
+        const lonNum = parseFloat(lon);
+        const rangeNum = rangeDeg === '' ? 5 : parseFloat(rangeDeg);
+        const hasFinite = Number.isFinite(latNum) && Number.isFinite(lonNum) && Number.isFinite(rangeNum);
         if (!hasFinite) { setRecords(allRecords); return; }
         let aborted = false;
         async function fetchProfiles() {
             try {
                 setLoading(true);
                 const url = new URL(`${API_BASE}/profiles`);
-                url.searchParams.set('lat', String(lat));
-                url.searchParams.set('lon', String(lon));
+                url.searchParams.set('lat', String(latNum));
+                url.searchParams.set('lon', String(lonNum));
                 url.searchParams.set('rangeDeg', String(rangeNum));
                 const res = await fetch(url.toString());
                 const data = await res.json();
@@ -115,9 +117,9 @@ function Dashboard() {
 
                 <div className="grid grid-cols-3 gap-3">
                     {[
-                        { label: 'Latitude', value: lat, onChange: e => setLat(parseFloat(e.target.value)), step: '0.01', type: 'number' },
-                        { label: 'Longitude', value: lon, onChange: e => setLon(parseFloat(e.target.value)), step: '0.01', type: 'number' },
-                        { label: 'Range (°)', value: rangeDeg, onChange: e => { const v = e.target.value; setRangeDeg(v === '' ? '' : parseFloat(v)); }, step: '0.1', placeholder: 'No filter', type: 'number' },
+                        { label: 'Latitude', value: lat, onChange: e => setLat(e.target.value), step: '0.01', type: 'number' },
+                        { label: 'Longitude', value: lon, onChange: e => setLon(e.target.value), step: '0.01', type: 'number' },
+                        { label: 'Range (°)', value: rangeDeg, onChange: e => setRangeDeg(e.target.value), step: '0.1', placeholder: 'No filter', type: 'number' },
                     ].map(f => (
                         <div key={f.label}>
                             <label
