@@ -1,7 +1,10 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Activity, Thermometer, Droplets, Layers, Download } from 'lucide-react';
+import { X, Activity, Thermometer, Droplets, Layers, Download, FileText } from 'lucide-react';
 import { MultiLineChart, StatCard } from './ChartWidgets';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 
 // High contrast palette for distinguishing regions on multi-line chart
 const COLORS = [
@@ -13,6 +16,8 @@ const COLORS = [
 ];
 
 export default function ChatPlots({ data, onClose }) {
+  const [isExporting, setIsExporting] = React.useState(false);
+
   if (!data || data.length === 0) return null;
 
   // Build combined datasets for the unified charts
@@ -135,6 +140,93 @@ export default function ChatPlots({ data, onClose }) {
     document.body.removeChild(link);
   };
 
+  const exportToPDF = async () => {
+    setIsExporting(true);
+    try {
+        const pdf = new jsPDF('p', 'pt', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const currentDateTime = new Date().toLocaleString();
+        
+        // Header
+        pdf.setFontSize(12);
+        pdf.setTextColor(120, 120, 120);
+        pdf.text('FloatChat Analytics', 40, 35);
+        
+        const dateWidth = pdf.getStringUnitWidth(currentDateTime) * pdf.internal.getFontSize();
+        pdf.text(currentDateTime, pageWidth - 40 - dateWidth, 35);
+        
+        pdf.setFontSize(24);
+        pdf.setTextColor(0, 150, 200);
+        pdf.text('Ocean Region Comparison Report', 40, 60);
+        
+        pdf.setDrawColor(0, 150, 200);
+        pdf.setLineWidth(1.5);
+        pdf.line(40, 75, pageWidth - 40, 75);
+        
+        // Regions Stats Table
+        const statsData = data.map((summary, idx) => {
+            const regionName = summary.region.name || `Region ${idx + 1}`;
+            return [
+                regionName,
+                summary.totals || '-',
+                summary.temperature ? Number(summary.temperature.mean).toFixed(2) : '-',
+                summary.salinity ? Number(summary.salinity.mean).toFixed(2) : '-',
+                summary.depth ? Number(summary.depth.max).toFixed(0) : '-'
+            ];
+        });
+        
+        autoTable(pdf, {
+            startY: 95,
+            head: [['Region', 'Records', 'Avg Temp (°C)', 'Avg Salinity (PSU)', 'Max Depth (m)']],
+            body: statsData,
+            theme: 'striped',
+            headStyles: { fillColor: [0, 150, 200] },
+            styles: { fontSize: 10, cellPadding: 4 },
+            margin: { top: 40, right: 40, bottom: 40, left: 40 }
+        });
+        
+        // Charts
+        const chartIds = ['chat-multi-temp', 'chat-multi-sal', 'chat-multi-oxy', 'chat-time-temp', 'chat-time-sal'];
+        let currentY = 95 + (statsData.length * 25) + 50; // Manual calculation instead of pdf.lastAutoTable.finalY
+        
+        for (let i = 0; i < chartIds.length; i++) {
+            const chartElement = document.getElementById(chartIds[i]);
+            if (chartElement) {
+                if (currentY > 500) {
+                    pdf.addPage();
+                    currentY = 50;
+                }
+                
+                pdf.setFontSize(14);
+                pdf.setTextColor(40, 40, 40);
+                let title = "Chart";
+                if (chartIds[i] === 'chat-multi-temp') title = "Temperature Comparison";
+                if (chartIds[i] === 'chat-multi-sal') title = "Salinity Comparison";
+                if (chartIds[i] === 'chat-multi-oxy') title = "Oxygen Comparison";
+                if (chartIds[i] === 'chat-time-temp') title = "Temperature vs Time Comparison";
+                if (chartIds[i] === 'chat-time-sal') title = "Salinity vs Time Comparison";
+                
+                pdf.text(title, 40, currentY);
+                
+                const canvas = await html2canvas(chartElement, { scale: 2, backgroundColor: '#020813' });
+                const imgData = canvas.toDataURL('image/png');
+                const imgWidth = 460;
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                const xOffset = (pageWidth - imgWidth) / 2;
+                
+                pdf.addImage(imgData, 'PNG', xOffset, currentY + 15, imgWidth, imgHeight);
+                currentY += imgHeight + 60;
+            }
+        }
+        
+        pdf.save('ocean_comparison_report.pdf');
+    } catch (err) {
+        console.error('Failed to export PDF', err);
+    } finally {
+        setIsExporting(false);
+    }
+  };
+
   return (
     <AnimatePresence>
       <motion.div
@@ -161,9 +253,19 @@ export default function ChatPlots({ data, onClose }) {
                   title="Download ASCII (CSV)"
                 >
                   <Download size={14} />
-                  <span>Export</span>
+                  <span>CSV</span>
                 </button>
-                <button onClick={onClose} className="text-white/50 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-md">
+                <button 
+                  onClick={exportToPDF}
+                  disabled={isExporting}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md cursor-pointer transition-colors"
+                  style={{ background: '#00d4ff', color: '#020813', fontWeight: 600, border: 'none', opacity: isExporting ? 0.7 : 1 }}
+                  title="Export PDF Report"
+                >
+                  <FileText size={14} />
+                  {isExporting ? 'Exporting...' : 'PDF'}
+                </button>
+                <button onClick={onClose} className="text-white/50 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-md ml-1">
                   <X size={16} />
                 </button>
             </div>
@@ -228,6 +330,7 @@ export default function ChatPlots({ data, onClose }) {
                     
                     {tempDatasets.length > 0 && (
                         <MultiLineChart
+                            id="chat-multi-temp"
                             title="Temperature vs Depth"
                             datasets={tempDatasets}
                             xLabel="Depth (m)"
@@ -237,6 +340,7 @@ export default function ChatPlots({ data, onClose }) {
                     )}
                     {salDatasets.length > 0 && (
                         <MultiLineChart
+                            id="chat-multi-sal"
                             title="Salinity vs Depth"
                             datasets={salDatasets}
                             xLabel="Depth (m)"
@@ -246,6 +350,7 @@ export default function ChatPlots({ data, onClose }) {
                     )}
                     {oxyDatasets.length > 0 && (
                         <MultiLineChart
+                            id="chat-multi-oxy"
                             title="Oxygen vs Depth"
                             datasets={oxyDatasets}
                             xLabel="Depth (m)"
@@ -257,6 +362,7 @@ export default function ChatPlots({ data, onClose }) {
                     {/* Time Series Alternatives if no Depth is available */}
                     {timeTempDatasets.length > 0 && (
                         <MultiLineChart
+                            id="chat-time-temp"
                             title="Temperature vs Time"
                             datasets={timeTempDatasets}
                             xLabel="Time"
@@ -267,6 +373,7 @@ export default function ChatPlots({ data, onClose }) {
                     )}
                     {timeSalDatasets.length > 0 && (
                         <MultiLineChart
+                            id="chat-time-sal"
                             title="Salinity vs Time"
                             datasets={timeSalDatasets}
                             xLabel="Time"

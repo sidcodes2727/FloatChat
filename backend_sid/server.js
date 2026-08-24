@@ -12,14 +12,14 @@ const chroma = new ChromaClient({ path: "http://localhost:8000" });
 
 let mcpClient = null;
 async function getMcpClient() {
-    if (mcpClient) return mcpClient;
-    const transport = new StdioClientTransport({
-        command: "node",
-        args: ["./mcp_server.js"]
-    });
-    mcpClient = new Client({ name: "floatchat-backend", version: "1.0.0" }, { capabilities: {} });
-    await mcpClient.connect(transport);
-    return mcpClient;
+  if (mcpClient) return mcpClient;
+  const transport = new StdioClientTransport({
+    command: "node",
+    args: ["./mcp_server.js"]
+  });
+  mcpClient = new Client({ name: "floatchat-backend", version: "1.0.0" }, { capabilities: {} });
+  await mcpClient.connect(transport);
+  return mcpClient;
 }
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
@@ -56,24 +56,24 @@ app.post('/ai/chat', async (req, res) => {
       return res.status(500).json({ error: 'GROQ_API_KEY not set on server' });
     }
     const { messages = [] } = req.body || {};
-    
+
     // Connect to MCP Server
     const mcp = await getMcpClient();
-    
+
     // Fetch available tools from MCP
     const toolsResp = await mcp.listTools();
     const groqTools = toolsResp.tools.map(tool => ({
-        type: "function",
-        function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.inputSchema
-        }
+      type: "function",
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema
+      }
     }));
 
     // Setup initial messages
     let systemPrompt = "You are floatCHAT — your ocean data assistant. You have access to tools to search ocean knowledge and query live ARGO data. Use them when necessary to answer the user's questions. CRITICAL RULE: When you receive data summaries from the database, explain them naturally and conversationally to the user in 1-3 sentences. Do not just copy-paste the raw summary text.";
-    
+
     const groqMessages = [{ role: 'system', content: systemPrompt }];
     messages.forEach(m => {
       if (m.role === 'user' || m.role === 'assistant') {
@@ -86,89 +86,89 @@ app.post('/ai/chat', async (req, res) => {
 
     // Loop for tool calling (up to 10 iterations)
     for (let i = 0; i < 10; i++) {
-        const groqReq = {
-            model: 'openai/gpt-oss-120b',
-            messages: groqMessages,
-            tools: groqTools,
-            tool_choice: "auto",
-            temperature: 0.1
-        };
+      const groqReq = {
+        model: 'openai/gpt-oss-120b',
+        messages: groqMessages,
+        tools: groqTools,
+        tool_choice: "auto",
+        temperature: 0.1
+      };
 
-        const finalResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify(groqReq)
-        });
+      const finalResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify(groqReq)
+      });
 
-        if (!finalResp.ok) {
-            const errText = await finalResp.text();
-            return res.status(500).json({ error: 'Groq API error', details: errText });
-        }
-        
-        const data = await finalResp.json();
-        const responseMessage = data.choices[0].message;
-        
-        // Add model's response to history
-        groqMessages.push(responseMessage);
+      if (!finalResp.ok) {
+        const errText = await finalResp.text();
+        return res.status(500).json({ error: 'Groq API error', details: errText });
+      }
 
-        if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
-            // Model wants to call a tool
-            for (const toolCall of responseMessage.tool_calls) {
-                const name = toolCall.function.name;
-                const args = JSON.parse(toolCall.function.arguments);
-                
-                console.log(`LLM called tool: ${name} with args:`, args);
-                
-                // Execute tool via MCP
-                const result = await mcp.callTool({ name, arguments: args });
-                let resultText = result.content[0].text;
-                
-                // If it's the database query, extract chart data for the frontend
-                if (name === "query_argo_database") {
-                    try {
-                        const parsed = JSON.parse(resultText);
-                        totalRowsUsed += parsed.rowCount;
-                        if (parsed.rowCount > 0) {
-                            const rows = parsed.data;
-                            const nums = (arr) => arr.filter(n => n !== null && n !== undefined).map(Number).filter(n => Number.isFinite(n));
-                            const stat = (v) => {
-                                const vals = nums(v);
-                                if (!vals.length) return null;
-                                return { count: vals.length, min: Math.min(...vals), max: Math.max(...vals), mean: parseFloat((vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2)) };
-                            };
-                            summaries.push({
-                                region: { name: args.locationName || `Region (${args.latitude.toFixed(1)}, ${args.longitude.toFixed(1)})`, center: { lat: args.latitude, lon: args.longitude }, rangeDeg: args.rangeDeg, year: args.year || "All Years" },
-                                totals: parsed.rowCount,
-                                depth: stat(rows.map(r => r.depth)),
-                                temperature: stat(rows.map(r => r.temperature)),
-                                salinity: stat(rows.map(r => r.salinity)),
-                                oxygen: stat(rows.map(r => r.oxygen)),
-                                points: rows.slice(0, 300)
-                            });
-                            // Condense text for LLM to avoid context overflow
-                            resultText = `Database search successful. Found ${parsed.rowCount} records. Average Temperature: ${stat(rows.map(r=>r.temperature))?.mean}°C, Average Salinity: ${stat(rows.map(r=>r.salinity))?.mean} PSU.`;
-                        } else {
-                            resultText = "Database returned 0 rows.";
-                        }
-                    } catch (e) {
-                        console.error("Error parsing DB tool output", e);
-                    }
-                }
-                
-                groqMessages.push({
-                    tool_call_id: toolCall.id,
-                    role: "tool",
-                    name: name,
-                    content: resultText,
+      const data = await finalResp.json();
+      const responseMessage = data.choices[0].message;
+
+      // Add model's response to history
+      groqMessages.push(responseMessage);
+
+      if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+        // Model wants to call a tool
+        for (const toolCall of responseMessage.tool_calls) {
+          const name = toolCall.function.name;
+          const args = JSON.parse(toolCall.function.arguments);
+
+          console.log(`LLM called tool: ${name} with args:`, args);
+
+          // Execute tool via MCP
+          const result = await mcp.callTool({ name, arguments: args });
+          let resultText = result.content[0].text;
+
+          // If it's the database query, extract chart data for the frontend
+          if (name === "query_argo_database") {
+            try {
+              const parsed = JSON.parse(resultText);
+              totalRowsUsed += parsed.rowCount;
+              if (parsed.rowCount > 0) {
+                const rows = parsed.data;
+                const nums = (arr) => arr.filter(n => n !== null && n !== undefined).map(Number).filter(n => Number.isFinite(n));
+                const stat = (v) => {
+                  const vals = nums(v);
+                  if (!vals.length) return null;
+                  return { count: vals.length, min: Math.min(...vals), max: Math.max(...vals), mean: parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2)) };
+                };
+                summaries.push({
+                  region: { name: args.locationName || `Region (${args.latitude.toFixed(1)}, ${args.longitude.toFixed(1)})`, center: { lat: args.latitude, lon: args.longitude }, rangeDeg: args.rangeDeg, year: args.year || "All Years" },
+                  totals: parsed.rowCount,
+                  depth: stat(rows.map(r => r.depth)),
+                  temperature: stat(rows.map(r => r.temperature)),
+                  salinity: stat(rows.map(r => r.salinity)),
+                  oxygen: stat(rows.map(r => r.oxygen)),
+                  points: rows.slice(0, 300)
                 });
+                // Condense text for LLM to avoid context overflow
+                resultText = `Database search successful. Found ${parsed.rowCount} records. Average Temperature: ${stat(rows.map(r => r.temperature))?.mean}°C, Average Salinity: ${stat(rows.map(r => r.salinity))?.mean} PSU.`;
+              } else {
+                resultText = "Database returned 0 rows.";
+              }
+            } catch (e) {
+              console.error("Error parsing DB tool output", e);
             }
-            // Loop back to send tool results to LLM
-        } else {
-            // Final textual response received
-            return res.json({ text: responseMessage.content || '', usedRows: totalRowsUsed, plottingData: summaries });
+          }
+
+          groqMessages.push({
+            tool_call_id: toolCall.id,
+            role: "tool",
+            name: name,
+            content: resultText,
+          });
         }
+        // Loop back to send tool results to LLM
+      } else {
+        // Final textual response received
+        return res.json({ text: responseMessage.content || '', usedRows: totalRowsUsed, plottingData: summaries });
+      }
     }
-    
+
     // Fallback if loop exceeded
     res.json({ text: groqMessages[groqMessages.length - 1].content || 'Max tool iterations reached.', usedRows: totalRowsUsed, plottingData: summaries });
 

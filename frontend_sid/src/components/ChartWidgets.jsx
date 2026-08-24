@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { TrendingUp } from 'lucide-react';
 
 /* ─── Chart component ─── */
-export function LineChart({ data, title, color, accentColor, xLabel = 'Depth', yLabel = 'Value', icon }) {
+export function LineChart({ data, title, color, accentColor, xLabel = 'Depth', yLabel = 'Value', icon, id }) {
     const containerRef = useRef();
     const svgRef = useRef();
 
@@ -171,7 +171,7 @@ export function LineChart({ data, title, color, accentColor, xLabel = 'Depth', y
     }, [data, title, color, xLabel, yLabel]);
 
     return (
-        <div ref={containerRef} className="card overflow-hidden w-full">
+        <div ref={containerRef} id={id} className="card overflow-hidden w-full">
             {/* Card header */}
             <div
                 className="flex items-center gap-3 px-5 py-3.5"
@@ -231,7 +231,7 @@ export function StatCard({ label, value, unit, icon, color = '#00d4ff' }) {
 }
 
 /* ─── Multi-Line Chart component ─── */
-export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel = 'Value', xScaleType = 'linear' }) {
+export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel = 'Value', xScaleType = 'linear', id }) {
     const containerRef = useRef();
     const svgRef = useRef();
 
@@ -442,7 +442,7 @@ export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel
     }, [datasets, title, xLabel, yLabel]);
 
     return (
-        <div ref={containerRef} className="card overflow-hidden w-full">
+        <div ref={containerRef} id={id} className="card overflow-hidden w-full">
             {/* Card header */}
             <div
                 className="flex items-center gap-3 px-5 py-3.5"
@@ -467,7 +467,7 @@ export function MultiLineChart({ datasets, title, icon, xLabel = 'Depth', yLabel
                {datasets.map((ds, i) => (
                   <div key={i} className="flex items-center gap-1.5">
                       <div className="w-2.5 h-2.5 rounded-full" style={{ background: ds.color }} />
-                      <span className="text-[10px] text-white/70">{ds.name}</span>
+                      <span className="text-[10px]" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>{ds.name}</span>
                   </div>
                ))}
             </div>
