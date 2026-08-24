@@ -38,6 +38,7 @@ function OceanVizApp() {
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
                     className={isFullScreenMap ? 'flex-1 relative overflow-hidden' : 'flex-1 relative overflow-y-auto overflow-x-hidden'}
+                    id="main-scroller"
                 >
                     <Suspense fallback={<div className="flex h-full items-center justify-center text-sm font-semibold tracking-wider text-[#00d4ff]/60 uppercase">Loading Module...</div>}>
                         {activePage === 'Depth Profiles' && (

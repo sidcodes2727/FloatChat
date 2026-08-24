@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<body>
+<script>
+  window.onerror = function(msg, url, line, col, error) {
+    fetch('http://localhost:3001/log', {
+      method: 'POST', 
+      body: JSON.stringify({msg, line, col, error: error ? error.stack : null})
+    });
+  }
+</script>
+</body>
+</html>

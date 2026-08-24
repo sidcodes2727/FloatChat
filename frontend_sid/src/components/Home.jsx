@@ -14,6 +14,12 @@ import bgVideo from '../assets/can_u_animate_this_image_and_m.mp4';
 import OceanParticles from './OceanParticles';
 import { API_BASE } from '../config';
 
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { useGSAP } from '@gsap/react';
+
+gsap.registerPlugin(ScrollTrigger, useGSAP);
+
 /* ─── Animated counter hook ─── */
 function useCounter(target, duration = 2000) {
   const [count, setCount] = useState(0);
@@ -105,14 +111,51 @@ function FeatureCard({ icon, title, description, accentColor = '#00d4ff', onClic
 }
 
 /* ─── Phase Section with scroll parallax ─── */
-function PhaseSection({ phase, title, titleAccent, description, image, imageAlt, reverse = false, delay = 0, index, containerRef }) {
+/* ─── Phase Section with GSAP Scrub Parallax ─── */
+function PhaseSection({ phase, title, titleAccent, description, image, imageAlt, reverse = false, delay = 0, index }) {
+  const sectionRef = useRef(null);
+  const textRef = useRef(null);
+  const imageRef = useRef(null);
+
+  useGSAP(() => {
+    const scroller = document.querySelector("#main-scroller");
+    if (!scroller || !textRef.current || !imageRef.current || !sectionRef.current) return;
+
+    // Text comes from the side
+    gsap.fromTo(textRef.current,
+      { x: reverse ? 120 : -120, opacity: 0 },
+      {
+        x: 0, opacity: 1,
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          scroller: scroller,
+          start: 'top 85%',
+          end: 'center center',
+          scrub: 1, // Smooth scrub
+        }
+      }
+    );
+
+    // Image comes from the opposite side
+    gsap.fromTo(imageRef.current,
+      { x: reverse ? -120 : 120, opacity: 0, scale: 0.9 },
+      {
+        x: 0, opacity: 1, scale: 1,
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          scroller: scroller,
+          start: 'top 85%',
+          end: 'center center',
+          scrub: 1,
+        }
+      }
+    );
+  }, { dependencies: [reverse] });
+
   return (
-    <motion.section
+    <section
+      ref={sectionRef}
       className={`flex flex-col ${reverse ? 'md:flex-row-reverse' : 'md:flex-row'} items-center gap-10 md:gap-16 py-16 md:py-24 relative`}
-      initial={{ opacity: 0, y: 50 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ root: containerRef, once: true, margin: '-100px' }}
-      transition={{ duration: 0.8, delay: delay * 0.1, ease: 'easeOut' }}
     >
       {/* Timeline dot */}
       <div className="absolute left-1/2 -translate-x-1/2 hidden md:block" style={{ top: 0 }}>
@@ -130,24 +173,16 @@ function PhaseSection({ phase, title, titleAccent, description, image, imageAlt,
       </div>
 
       {/* Text side */}
-      <div className="flex-1 max-w-lg">
-        <motion.span
+      <div className="flex-1 max-w-lg" ref={textRef}>
+        <span
           className="text-[10px] font-bold uppercase tracking-[0.3em] mb-4 block"
           style={{ color: 'rgba(0, 212, 255, 0.6)', fontFamily: "'Exo 2', sans-serif" }}
-          initial={{ opacity: 0, x: reverse ? 30 : -30 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ root: containerRef, once: true }}
-          transition={{ duration: 0.6, delay: 0.2 }}
         >
           {phase}
-        </motion.span>
-        <motion.h2
+        </span>
+        <h2
           className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6 leading-[1.1] tracking-tight"
           style={{ fontFamily: "'Exo 2', sans-serif" }}
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ root: containerRef, once: true }}
-          transition={{ duration: 0.7, delay: 0.3 }}
         >
           <span className="text-white">{title} </span>
           <span
@@ -163,32 +198,23 @@ function PhaseSection({ phase, title, titleAccent, description, image, imageAlt,
           >
             {titleAccent}
           </span>
-        </motion.h2>
-        <motion.p
+        </h2>
+        <p
           className="text-base md:text-lg leading-relaxed"
           style={{ color: 'rgba(232, 244, 253, 0.55)', fontFamily: "'Exo 2', sans-serif" }}
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ root: containerRef, once: true }}
-          transition={{ duration: 0.6, delay: 0.4 }}
         >
           {description}
-        </motion.p>
+        </p>
       </div>
 
       {/* Image side */}
-      <div className="flex-1 max-w-lg w-full">
-        <motion.div
-          className="rounded-2xl overflow-hidden"
+      <div className="flex-1 max-w-lg w-full" ref={imageRef}>
+        <div
+          className="rounded-2xl overflow-hidden hover:scale-[1.02] transition-transform duration-300"
           style={{
             border: '1px solid rgba(0, 212, 255, 0.1)',
             boxShadow: '0 8px 40px rgba(0, 0, 0, 0.4)',
           }}
-          initial={{ opacity: 0, scale: 0.85, x: reverse ? -50 : 50 }}
-          whileInView={{ opacity: 1, scale: 1, x: 0 }}
-          viewport={{ root: containerRef, once: true }}
-          transition={{ duration: 0.8, delay: 0.3, ease: [0.4, 0, 0.2, 1] }}
-          whileHover={{ scale: 1.02 }}
         >
           <img
             src={image}
@@ -197,9 +223,9 @@ function PhaseSection({ phase, title, titleAccent, description, image, imageAlt,
             className="w-full h-auto object-cover"
             style={{ display: 'block' }}
           />
-      </motion.div>
+        </div>
       </div>
-    </motion.section>
+    </section>
   );
 }
 
@@ -426,11 +452,11 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
         <motion.div style={{ y: heroY }} className="absolute inset-0">
           <video
             ref={(el) => {
-               if (el) {
-                  el.defaultMuted = true;
-                  el.muted = true;
-                  el.play().catch(e => console.log("Autoplay prevented", e));
-               }
+              if (el) {
+                el.defaultMuted = true;
+                el.muted = true;
+                el.play().catch(e => console.log("Autoplay prevented", e));
+              }
             }}
             autoPlay
             loop
@@ -460,13 +486,13 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
             transition={{ duration: 0.8, ease: 'easeOut' }}
             className="w-full"
           >
-            {/* Animated gradient title */}
+            {/* Solid blue title without glow or animation */}
             <h1
-              className="font-normal tracking-wide uppercase select-none w-full leading-none text-gradient-animated"
+              className="font-normal tracking-wide uppercase select-none w-full leading-none"
               style={{
                 fontFamily: "'Findet Nemo', sans-serif",
                 fontSize: 'clamp(3rem, 10vw, 8rem)',
-                textShadow: '0 10px 40px rgba(0,0,0,0.5)',
+                color: '#00d4ff',
               }}
             >
               FLOATCHAT
@@ -564,7 +590,6 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
           image={imgArgo}
           imageAlt="Argo Float collecting ocean data"
           index={0}
-          containerRef={mainScrollRef}
         />
 
         <Divider />
@@ -578,7 +603,6 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
           imageAlt="Cloud database ingestion pipeline"
           reverse
           index={1}
-          containerRef={mainScrollRef}
         />
 
         <Divider />
@@ -591,7 +615,6 @@ export default function Home({ setActivePage, setChatOpen, mainScrollRef }) {
           image={imgDashboard}
           imageAlt="Interactive ocean dashboard"
           index={2}
-          containerRef={mainScrollRef}
         />
       </div>
 
