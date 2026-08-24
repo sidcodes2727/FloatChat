@@ -145,8 +145,16 @@ app.post('/ai/chat', async (req, res) => {
                   oxygen: stat(rows.map(r => r.oxygen)),
                   points: rows.slice(0, 300)
                 });
+                const depthStat = stat(rows.map(r => r.depth));
+                const tempStat = stat(rows.map(r => r.temperature));
+                const salStat = stat(rows.map(r => r.salinity));
+                const oxyStat = stat(rows.map(r => r.oxygen));
                 // Condense text for LLM to avoid context overflow
-                resultText = `Database search successful. Found ${parsed.rowCount} records. Average Temperature: ${stat(rows.map(r => r.temperature))?.mean}°C, Average Salinity: ${stat(rows.map(r => r.salinity))?.mean} PSU.`;
+                resultText = `Database search successful. Found ${parsed.rowCount} records. ` +
+                  (depthStat ? `Depth ranged ${depthStat.min} - ${depthStat.max} m (mean ${depthStat.mean} m), ` : '') +
+                  (tempStat ? `Temperature ${tempStat.min} - ${tempStat.max}°C (mean ${tempStat.mean}°C), ` : '') +
+                  (salStat ? `Salinity ${salStat.min} - ${salStat.max} PSU (mean ${salStat.mean} PSU), ` : '') +
+                  (oxyStat ? `Oxygen ${oxyStat.min} - ${oxyStat.max} µmol/kg (mean ${oxyStat.mean} µmol/kg).` : '');
               } else {
                 resultText = "Database returned 0 rows.";
               }
