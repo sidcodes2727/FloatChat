@@ -30,7 +30,7 @@ function Navbar({ activePage, setActivePage }) {
 
     return (
         <header
-            className="w-full sticky top-0 z-30"
+            className="w-full sticky top-0 z-30 nav-water-line"
             style={{
                 backdropFilter: 'blur(20px) saturate(160%)',
                 WebkitBackdropFilter: 'blur(20px) saturate(160%)',
@@ -64,10 +64,10 @@ function Navbar({ activePage, setActivePage }) {
                         />
                     </div>
                     <span
-                        className="text-xl font-semibold tracking-tight"
+                        className="text-3xl tracking-tighter"
                         style={{
-                            fontFamily: "'Space Grotesk', Inter, sans-serif",
-                            background: 'linear-gradient(135deg, #38e8ff 0%, #00d4ff 50%, #80d8f0 100%)',
+                            fontFamily: "'Shark Heavy', sans-serif",
+                            background: 'linear-gradient(135deg, #00f5d4 0%, #00d4ff 50%, #38e8ff 100%)',
                             WebkitBackgroundClip: 'text',
                             WebkitTextFillColor: 'transparent',
                             backgroundClip: 'text',
@@ -91,6 +91,7 @@ function Navbar({ activePage, setActivePage }) {
                                 style={{
                                     color: isActive ? '#fff' : 'rgba(232,244,253,0.55)',
                                     background: isActive ? 'rgba(0, 212, 255, 0.1)' : 'transparent',
+                                    fontFamily: "'Exo 2', sans-serif",
                                 }}
                                 title={item.name}
                             >
@@ -155,6 +156,7 @@ function Navbar({ activePage, setActivePage }) {
                                             color: isActive ? '#fff' : 'rgba(232,244,253,0.6)',
                                             background: isActive ? 'rgba(0, 212, 255, 0.1)' : 'transparent',
                                             borderLeft: isActive ? '2px solid #00d4ff' : '2px solid transparent',
+                                            fontFamily: "'Exo 2', sans-serif",
                                         }}
                                     >
                                         <span style={{ color: isActive ? '#00d4ff' : 'inherit' }}>{item.icon}</span>

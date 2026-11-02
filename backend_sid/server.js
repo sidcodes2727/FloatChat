@@ -1,16 +1,26 @@
 require('dotenv').config();
 const express = require("express");
 const client = require("./database/db");
-const { fetchObisSpecies } = require("./services/obis_service");
-const { fetchArgovisProfiles, fetchGlobalArgovisPoints } = require("./services/argovis_service");
-const fs = require("fs");
-const path = require("path");
-const Groq = require("groq-sdk");
-
+const { ChromaClient } = require('chromadb');
+const { Client } = require("@modelcontextprotocol/sdk/client/index.js");
+const { StdioClientTransport } = require("@modelcontextprotocol/sdk/client/stdio.js");
 const app = express();
 const port = process.env.PORT || 3001;
 const cors = require("cors");
 
+const chroma = new ChromaClient({ path: "http://localhost:8000" });
+
+let mcpClient = null;
+async function getMcpClient() {
+  if (mcpClient) return mcpClient;
+  const transport = new StdioClientTransport({
+    command: "node",
+    args: ["./mcp_server.js"]
+  });
+  mcpClient = new Client({ name: "floatchat-backend", version: "1.0.0" }, { capabilities: {} });
+  await mcpClient.connect(transport);
+  return mcpClient;
+}
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
@@ -122,258 +132,28 @@ app.get("/", (req, res) => {
   res.send("🌊 ARGO Backend API is running!");
 });
 
-// Helper: normalize metrics to numbers with nulls -> 0
+// Helper: normalize metrics to numbers with nulls instead of 0s for invalid data
 function normalizeMetrics(row) {
   const out = { ...row };
-  const coerce = (v) => {
+  const coerce = (v, min, max) => {
+    if (v === null || v === undefined) return null;
     const n = Number(v);
-    if (!Number.isFinite(n)) return 0;
-    if (Math.abs(n) > 1e6) return 0;
+    if (!Number.isFinite(n)) return null;
+    if (n < min || n > max) return null; // Filter out 99999 placeholder sensor values
     return n;
   };
-  if ('temperature' in out) out.temperature = coerce(out.temperature);
-  if ('salinity' in out) out.salinity = coerce(out.salinity);
-  if ('oxygen' in out) out.oxygen = coerce(out.oxygen);
-  if ('pressure' in out) out.pressure = coerce(out.pressure);
-  if ('depth' in out) out.depth = coerce(out.depth);
+  if ('temperature' in out) out.temperature = coerce(out.temperature, -5, 50);
+  if ('salinity' in out) out.salinity = coerce(out.salinity, 0, 60);
+  if ('oxygen' in out) out.oxygen = coerce(out.oxygen, 0, 1000);
+  if ('pressure' in out) out.pressure = coerce(out.pressure, -10, 12000);
+  if ('depth' in out) out.depth = coerce(out.depth, -10, 12000);
+  if ('year' in out) out.year = out.year != null ? Number(out.year) : null;
   return out;
 }
 
-// Chat with contextual data from Postgres near given lat/lon ± rangeDeg (degrees)
-app.post('/ai/chat_context', async (req, res) => {
-  console.log('Chat context request received');
-  try {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: 'GROQ_API_KEY not set on server' });
-    }
-    const { messages = [], lat, lon, rangeDeg, limit = 100 } = req.body || {};
-    let latNum = parseFloat(lat);
-    let lonNum = parseFloat(lon);
-    const rangeNum = parseFloat(rangeDeg);
-
-    // Try to auto-extract lat/lon from user messages (in case they typed coords while a map point is active)
-    let extractedLat = null;
-    let extractedLon = null;
-    const lastUserMessage = messages.slice().reverse().find(m => m.role === 'user')?.content || '';
-    const normalizedText = lastUserMessage.replace(/[°˚º]/g, ' ').replace(/\u200B/g, '');
-
-    // Check for named ocean region first
-    const namedRegion = resolveNamedRegion(lastUserMessage);
-    if (namedRegion) {
-      console.log(`[CONTEXT-REGION] Resolved named region: ${namedRegion.name}`);
-      extractedLat = namedRegion.centerLat;
-      extractedLon = namedRegion.centerLon;
-      latNum = namedRegion.centerLat;
-      lonNum = namedRegion.centerLon;
-    }
-
-    if (!namedRegion) {
-      const coordPatterns = [
-        /(-?\d+\.?\d*)\s*([NS])\s*[,;\s]+\s*(-?\d+\.?\d*)\s*([EW])/i,
-        /lat(?:itude)?\s*[:=]?\s*(-?\d+\.?\d*)\s*[,;\s]+\s*lon(?:gitude)?\s*[:=]?\s*(-?\d+\.?\d*)/i,
-        /\(?\s*(-?\d+\.?\d*)\s*(?:and|,|;|\s)+\s*(-?\d+\.?\d*)\s*\)?/i,
-      ];
-      for (const pattern of coordPatterns) {
-        const match = normalizedText.match(pattern);
-        if (match) {
-          if (match[2] && /[NSEW]/i.test(match[2])) {
-            extractedLat = parseFloat(match[1]);
-            if (/[Ss]/.test(match[2])) extractedLat = -extractedLat;
-            extractedLon = parseFloat(match[3]);
-            if (/[Ww]/.test(match[4])) extractedLon = -extractedLon;
-          } else {
-            const a = parseFloat(match[1]);
-            const b = parseFloat(match[2]);
-            if (Math.abs(a) <= 90 && Math.abs(b) <= 180) {
-              extractedLat = a;
-              extractedLon = b;
-            }
-          }
-          if (extractedLat !== null) break;
-        }
-      }
-    }
-
-    if (extractedLat !== null && extractedLon !== null) {
-      console.log(`[CONTEXT-OVERRIDE] Extracted coords from text: ${extractedLat}, ${extractedLon}`);
-      latNum = extractedLat;
-      lonNum = extractedLon;
-    }
-
-    if (!Number.isFinite(latNum) || !Number.isFinite(lonNum) || !Number.isFinite(rangeNum)) {
-      return res.status(400).json({ error: 'lat, lon, rangeDeg must be valid numbers' });
-    }
-
-    const dbLon = lonNum < 0 ? lonNum + 360 : lonNum;
-
-    const latMin = latNum - rangeNum;
-    const latMax = latNum + rangeNum;
-    const lonMin = dbLon - rangeNum;
-    const lonMax = dbLon + rangeNum;
-
-    // Pull a bounded set of rows for context
-    const q = `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
-               FROM t1
-               WHERE latitude BETWEEN $1 AND $2
-                 AND longitude BETWEEN $3 AND $4
-                 AND (temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL)
-               ORDER BY time_ts DESC, depth ASC
-               LIMIT $5`;
-    let db = await client.query(q, [latMin, latMax, lonMin, lonMax, Math.max(1, Math.min(1000, Number(limit) || 100))]);
-    let rows = (db.rows || []).map(normalizeMetrics);
-    
-    let isFallback = false;
-    let nearestDistDeg = 0;
-    let nearestLat = null;
-    let nearestLon = null;
-    const MAX_DISTANCE_THRESHOLD = 30; // degrees — beyond this, data is too far to be useful
-
-    if (rows.length === 0) {
-      console.log('No data found in region, falling back to nearest points');
-      const fallbackQ = `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts,
-                                SQRT(POWER(latitude - $1, 2) + POWER(longitude - $2, 2)) as dist_deg
-                         FROM t1
-                         WHERE temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL
-                         ORDER BY ((latitude - $1)^2 + (longitude - $2)^2) ASC
-                         LIMIT 20`;
-      db = await client.query(fallbackQ, [latNum, dbLon]);
-      rows = (db.rows || []).map(normalizeMetrics);
-      isFallback = true;
-
-      if (rows.length > 0) {
-        nearestDistDeg = parseFloat(db.rows[0].dist_deg) || 0;
-        nearestLat = db.rows[0].latitude;
-        // Convert DB lon back to -180..180 for display
-        nearestLon = db.rows[0].longitude > 180 ? db.rows[0].longitude - 360 : db.rows[0].longitude;
-      }
-    }
-
-    // Summarize basic stats to keep prompt small
-    const nums = (arr) => arr.map(Number).filter(n => Number.isFinite(n));
-    function stat(values) {
-      const v = nums(values);
-      if (!v.length) return null;
-      const min = Math.min(...v), max = Math.max(...v);
-      const mean = v.reduce((s, x) => s + x, 0) / v.length;
-      return { count: v.length, min, max, mean };
-    }
-    const summary = {
-      region: { center: { lat: latNum, lon: lonNum }, rangeDeg: rangeNum },
-      totals: rows.length,
-      depth: stat(rows.map(r => r.depth)),
-      temperature: stat(rows.map(r => r.temperature)),
-      salinity: stat(rows.map(r => r.salinity)),
-      oxygen: stat(rows.map(r => r.oxygen)),
-      sample: rows.slice(0, 10)
-    };
-
-    // Retrieve unstructured reference text for RAG
-    const retrievedDocsList = retrieveDocs(lastUserMessage, 3);
-
-    // Build context preamble
-    let preambleText = `=== CONTEXT BLOCK ===\n`;
-    if (isFallback && nearestDistDeg > MAX_DISTANCE_THRESHOLD) {
-      // Too far — no useful data
-      preambleText += `[DATA CONTEXT]\n(No ARGO float data found anywhere near Lat=${latNum}, Lon=${lonNum}. The closest data point is ${nearestDistDeg.toFixed(1)}° away, which is too far to be representative. No statistics available.)\n`;
-    } else if (summary.totals > 0) {
-      preambleText += `[DATA CONTEXT]\n`;
-      if (isFallback) {
-        preambleText += `Approximate nearby data for Lat=${latNum}, Lon=${lonNum}. (Used ${summary.totals} nearest reference points. The closest point is at Lat=${nearestLat}, Lon=${nearestLon?.toFixed(2)}, which is ${nearestDistDeg.toFixed(1)}° away.)\n`;
-      } else {
-        preambleText += `Region/Range: Center Lat=${latNum}, Lon=${lonNum}, RangeDeg=${rangeNum}\n`;
-      }
-      preambleText += `Total float observations: ${summary.totals}\n`;
-      if (summary.depth) preambleText += `Depth Stats (m): Min=${summary.depth.min.toFixed(2)}, Max=${summary.depth.max.toFixed(2)}, Mean=${summary.depth.mean.toFixed(2)}, Count=${summary.depth.count}\n`;
-      if (summary.temperature) preambleText += `Temperature Stats (°C): Min=${summary.temperature.min.toFixed(2)}, Max=${summary.temperature.max.toFixed(2)}, Mean=${summary.temperature.mean.toFixed(2)}, Count=${summary.temperature.count}\n`;
-      if (summary.salinity) preambleText += `Salinity Stats (PSU): Min=${summary.salinity.min.toFixed(2)}, Max=${summary.salinity.max.toFixed(2)}, Mean=${summary.salinity.mean.toFixed(2)}, Count=${summary.salinity.count}\n`;
-      if (summary.oxygen) preambleText += `Oxygen Stats (µmol/kg): Min=${summary.oxygen.min.toFixed(2)}, Max=${summary.oxygen.max.toFixed(2)}, Mean=${summary.oxygen.mean.toFixed(2)}, Count=${summary.oxygen.count}\n`;
-    } else {
-      preambleText += `[DATA CONTEXT]\n(No matching data found)\n`;
-    }
-
-
-    // Retrieve OBIS Marine Biodiversity & Argovis Live Float Data
-    let obisSummary = '';
-    let argovisSummary = '';
-    try {
-      const [obisData, argovisData] = await Promise.all([
-        fetchObisSpecies(latNum, lonNum, rangeNum, 35),
-        fetchArgovisProfiles(latNum, lonNum, rangeNum)
-      ]);
-      if (obisData && obisData.summaryText) obisSummary = obisData.summaryText;
-      if (argovisData && argovisData.summaryText) argovisSummary = argovisData.summaryText;
-    } catch (err) {
-      console.error('[CONTEXT-ENRICHMENT] Error in chat_context:', err.message);
-    }
-
-    if (argovisSummary) {
-      preambleText += `\n[ARGOVIS LIVE GLOBAL ARGO DATA]\n${argovisSummary}\n`;
-    }
-
-    if (obisSummary) {
-      preambleText += `\n[OBIS BIODIVERSITY CONTEXT]\n${obisSummary}\n`;
-    }
-
-    if (retrievedDocsList.length > 0) {
-      preambleText += `\n[REFERENCE CONTEXT]\n`;
-      retrievedDocsList.forEach((passage, idx) => {
-        preambleText += `${idx + 1}. ${passage}\n`;
-      });
-    }
-    preambleText += `=====================\n`;
-
-    // Map conversation messages to Groq chat format
-    const chatMessages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...messages.slice(0, -1).map(m => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: String(m.content || '')
-      })),
-      {
-        role: 'user',
-        content: `${preambleText}\n\nUser Question:\n${messages[messages.length - 1]?.content || ''}`
-      }
-    ];
-
-    // Debug: log context and message count
-    console.log(`[DEBUG] Rows found: ${rows.length}, isFallback: ${isFallback}, message count: ${chatMessages.length}`);
-    console.log(`[DEBUG] Preamble snippet: ${preambleText.substring(0, 300)}...`);
-
-    const completion = await groq.chat.completions.create({
-      messages: chatMessages,
-      model: 'openai/gpt-oss-120b',
-      temperature: 0.2,
-      max_tokens: 2000
-    });
-
-    const text = completion.choices[0]?.message?.content || '';
-    console.log(`[DEBUG] AI response: ${text.substring(0, 200)}...`);
-    
-    const responsePayload = { text, usedRows: rows.length };
-    
-    // If the user explicitly typed coordinates, or if we fell back, send back coordinates to shift the map/panel
-    if (extractedLat !== null && extractedLon !== null) {
-      if (isFallback && nearestLat !== null && nearestLon !== null) {
-        responsePayload.extractedCoords = { lat: nearestLat, lon: nearestLon };
-      } else {
-        responsePayload.extractedCoords = { lat: extractedLat, lon: extractedLon };
-      }
-    } else if (isFallback && nearestLat !== null && nearestLon !== null) {
-      responsePayload.extractedCoords = { lat: nearestLat, lon: nearestLon };
-    }
-
-    res.json(responsePayload);
-  } catch (err) {
-    console.error('Chat context handler failed:', err);
-    res.status(500).json({ error: 'An error occurred while communicating with the Groq AI service.' });
-  }
-});
-
-// Simple proxy to Groq for chat, enhanced with RAG
-// Now auto-extracts coordinates from the user's message to query the database
+// Unified Chat endpoint with Groq and MCP Tool Calling
 app.post('/ai/chat', async (req, res) => {
-  console.log("Chat request received");
+  console.log('Chat request received');
   try {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
@@ -381,344 +161,139 @@ app.post('/ai/chat', async (req, res) => {
     }
     const { messages = [] } = req.body || {};
 
-    const lastUserMessage = messages.slice().reverse().find(m => m.role === 'user')?.content || '';
-    const retrievedDocsList = retrieveDocs(lastUserMessage, 3);
+    // Connect to MCP Server
+    const mcp = await getMcpClient();
 
-    // Try to auto-extract lat/lon from the latest user message
-    let extractedLat = null;
-    let extractedLon = null;
-    let resolvedRangeDeg = 2; // default range
-
-    // Normalize degree-like characters: °, ˚, º, and unicode variants
-    const normalizedText = lastUserMessage.replace(/[°˚º]/g, ' ').replace(/\u200B/g, '');
-
-    // Check for named ocean region first
-    const namedRegion = resolveNamedRegion(lastUserMessage);
-    if (namedRegion) {
-      console.log(`[AUTO-EXTRACT] Resolved named region: ${namedRegion.name}`);
-      extractedLat = namedRegion.centerLat;
-      extractedLon = namedRegion.centerLon;
-      resolvedRangeDeg = namedRegion.rangeDeg;
-    }
-
-    if (!namedRegion) {
-      // Match patterns like: "26 N, 66 W", "26N 66W", "lat 26 lon -66", etc.
-      const coordPatterns = [
-        // "26 N, 66 W" or "26N, 66W" or "26 N 66 W" — with optional degree symbol already stripped
-        /(-?\d+\.?\d*)\s*([NS])\s*[,;\s]+\s*(-?\d+\.?\d*)\s*([EW])/i,
-        // "lat 26, lon -66" or "latitude 26 longitude -66"
-        /lat(?:itude)?\s*[:=]?\s*(-?\d+\.?\d*)\s*[,;\s]+\s*lon(?:gitude)?\s*[:=]?\s*(-?\d+\.?\d*)/i,
-        // Bare coordinates like "26, -66" or "(26, -66)" or "26 and -66"
-        /\(?\s*(-?\d+\.?\d*)\s*(?:and|,|;|\s)+\s*(-?\d+\.?\d*)\s*\)?/i,
-      ];
-
-      for (const pattern of coordPatterns) {
-        const match = normalizedText.match(pattern);
-        if (match) {
-          if (match[2] && /[NSEW]/i.test(match[2])) {
-            // Pattern with N/S E/W directions
-            extractedLat = parseFloat(match[1]);
-            if (/[Ss]/.test(match[2])) extractedLat = -extractedLat;
-            extractedLon = parseFloat(match[3]);
-            if (/[Ww]/.test(match[4])) extractedLon = -extractedLon;
-          } else {
-            // Pattern with raw numbers — only use if they look like coordinates
-            const a = parseFloat(match[1]);
-            const b = parseFloat(match[2]);
-            if (Math.abs(a) <= 90 && Math.abs(b) <= 180) {
-              extractedLat = a;
-              extractedLon = b;
-            }
-          }
-          if (extractedLat !== null) break;
-        }
-      }
-    }
-
-    console.log(`[AUTO-EXTRACT] normalizedText snippet: "${normalizedText.substring(0, 150)}"`);
-    console.log(`[AUTO-EXTRACT] extractedLat=${extractedLat}, extractedLon=${extractedLon}`);
-
-    let preambleText = `=== CONTEXT BLOCK ===\n`;
-    let isFallback = false;
-    let nearestLat = null;
-    let nearestLon = null;
-
-    // If we extracted coordinates, auto-query the database
-    if (Number.isFinite(extractedLat) && Number.isFinite(extractedLon) &&
-        Math.abs(extractedLat) <= 90) {
-      console.log(`[AUTO-EXTRACT] Detected coordinates: Lat=${extractedLat}, Lon=${extractedLon}`);
-      
-      const dbLon = extractedLon < 0 ? extractedLon + 360 : extractedLon;
-      const rangeNum = resolvedRangeDeg;
-      const latMin = extractedLat - rangeNum;
-      const latMax = extractedLat + rangeNum;
-      const lonMin = dbLon - rangeNum;
-      const lonMax = dbLon + rangeNum;
-
-      const q = `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
-                 FROM t1
-                 WHERE latitude BETWEEN $1 AND $2
-                   AND longitude BETWEEN $3 AND $4
-                   AND (temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL)
-                 ORDER BY time_ts DESC, depth ASC
-                 LIMIT 100`;
-      let db = await client.query(q, [latMin, latMax, lonMin, lonMax]);
-      let rows = (db.rows || []).map(normalizeMetrics);
-
-      let nearestDistDeg = 0;
-
-      if (rows.length === 0) {
-        console.log('[AUTO-EXTRACT] No data in region, falling back to nearest');
-        const fallbackQ = `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts,
-                                  SQRT(POWER(latitude - $1, 2) + POWER(longitude - $2, 2)) as dist_deg
-                           FROM t1
-                           WHERE temperature IS NOT NULL OR salinity IS NOT NULL OR oxygen IS NOT NULL
-                           ORDER BY ((latitude - $1)^2 + (longitude - $2)^2) ASC
-                           LIMIT 20`;
-        db = await client.query(fallbackQ, [extractedLat, dbLon]);
-        rows = (db.rows || []).map(normalizeMetrics);
-        isFallback = true;
-        if (rows.length > 0) {
-          nearestDistDeg = parseFloat(db.rows[0].dist_deg) || 0;
-          nearestLat = db.rows[0].latitude;
-          nearestLon = db.rows[0].longitude > 180 ? db.rows[0].longitude - 360 : db.rows[0].longitude;
-        }
-      }
-
-      // Compute stats
-      const nums = (arr) => arr.map(Number).filter(n => Number.isFinite(n));
-      function stat(values) {
-        const v = nums(values);
-        if (!v.length) return null;
-        const min = Math.min(...v), max = Math.max(...v);
-        const mean = v.reduce((s, x) => s + x, 0) / v.length;
-        return { count: v.length, min, max, mean };
-      }
-      const summary = {
-        totals: rows.length,
-        depth: stat(rows.map(r => r.depth)),
-        temperature: stat(rows.map(r => r.temperature)),
-        salinity: stat(rows.map(r => r.salinity)),
-        oxygen: stat(rows.map(r => r.oxygen)),
-      };
-
-      if (isFallback && nearestDistDeg > 30) {
-        preambleText += `[DATA CONTEXT]\n(No ARGO float data found anywhere near Lat=${extractedLat}, Lon=${extractedLon}. Closest is ${nearestDistDeg.toFixed(1)}° away — too far to be useful.)\n`;
-      } else if (summary.totals > 0) {
-        preambleText += `[DATA CONTEXT]\n`;
-        if (isFallback) {
-          preambleText += `Approximate nearby data for Lat=${extractedLat}, Lon=${extractedLon}. (Used ${summary.totals} nearest reference points. The closest point is at Lat=${nearestLat}, Lon=${nearestLon?.toFixed(2)}, which is ${nearestDistDeg.toFixed(1)}° away.)\n`;
-        } else {
-          preambleText += `Auto-detected Region: Lat=${extractedLat}, Lon=${extractedLon} ±2°\n`;
-        }
-        preambleText += `Total observations: ${summary.totals}\n`;
-        if (summary.depth) preambleText += `Depth (m): Min=${summary.depth.min.toFixed(2)}, Max=${summary.depth.max.toFixed(2)}, Mean=${summary.depth.mean.toFixed(2)}\n`;
-        if (summary.temperature) preambleText += `Temperature (°C): Min=${summary.temperature.min.toFixed(2)}, Max=${summary.temperature.max.toFixed(2)}, Mean=${summary.temperature.mean.toFixed(2)}\n`;
-        if (summary.salinity) preambleText += `Salinity (PSU): Min=${summary.salinity.min.toFixed(2)}, Max=${summary.salinity.max.toFixed(2)}, Mean=${summary.salinity.mean.toFixed(2)}\n`;
-        if (summary.oxygen) preambleText += `Oxygen (µmol/kg): Min=${summary.oxygen.min.toFixed(2)}, Max=${summary.oxygen.max.toFixed(2)}, Mean=${summary.oxygen.mean.toFixed(2)}\n`;
-      } else {
-        preambleText += `[DATA CONTEXT]\n(No matching data found)\n`;
-      }
-      // Retrieve OBIS Marine Biodiversity & Argovis Live Float Data for extracted region
-      try {
-        const [obisData, argovisData] = await Promise.all([
-          fetchObisSpecies(extractedLat, extractedLon, resolvedRangeDeg, 35),
-          fetchArgovisProfiles(extractedLat, extractedLon, resolvedRangeDeg)
-        ]);
-        if (argovisData && argovisData.summaryText) {
-          preambleText += `\n[ARGOVIS LIVE GLOBAL ARGO DATA]\n${argovisData.summaryText}\n`;
-        }
-        if (obisData && obisData.summaryText) {
-          preambleText += `\n[OBIS BIODIVERSITY CONTEXT]\n${obisData.summaryText}\n`;
-        }
-      } catch (err) {
-        console.error('[CONTEXT-ENRICHMENT] Error in /ai/chat:', err.message);
-      }
-    } else {
-      preambleText += `[DATA CONTEXT]\n(No coordinates detected in the user's message and no region selected on the map.)\n`;
-    }
-
-    if (retrievedDocsList.length > 0) {
-      preambleText += `\n[REFERENCE CONTEXT]\n`;
-      retrievedDocsList.forEach((passage, idx) => {
-        preambleText += `${idx + 1}. ${passage}\n`;
-      });
-    }
-    preambleText += `=====================\n`;
-
-    console.log(`[DEBUG /ai/chat] Preamble: ${preambleText.substring(0, 300)}...`);
-
-    const chatMessages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...messages.slice(0, -1).map(m => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: String(m.content || '')
-      })),
-      {
-        role: 'user',
-        content: `${preambleText}\n\nUser Question:\n${messages[messages.length - 1]?.content || ''}`
-      }
-    ];
-
-    const completion = await groq.chat.completions.create({
-      messages: chatMessages,
-      model: 'openai/gpt-oss-120b',
-      temperature: 0.2,
-      max_tokens: 2000
-    });
-
-    const text = completion.choices[0]?.message?.content || '';
-    console.log(`[DEBUG /ai/chat] AI response: ${text.substring(0, 200)}...`);
-    
-    // Return extracted coordinates so the frontend can trigger the Visualization Panel
-    const responsePayload = { text };
-    if (extractedLat !== null && extractedLon !== null) {
-      if (isFallback && nearestLat !== null && nearestLon !== null) {
-        // If we fell back to nearest points, open the visualization panel at that nearest location
-        responsePayload.extractedCoords = { lat: nearestLat, lon: nearestLon };
-      } else {
-        responsePayload.extractedCoords = { lat: extractedLat, lon: extractedLon };
-      }
-    }
-    
-    res.json(responsePayload);
-  } catch (err) {
-    console.error('Chat handler failed:', err);
-
-    res.status(500).json({ error: 'An error occurred while communicating with the Groq AI service.' });
-  }
-});
-
-// ── Compare endpoint: fetch profile data for multiple locations ──────────────
-// Body: { locations: [{ lat, lon, label }, ...] }
-app.post('/compare', async (req, res) => {
-  try {
-    const { locations = [] } = req.body || {};
-    if (!Array.isArray(locations) || locations.length === 0) {
-      return res.status(400).json({ error: 'locations array is required' });
-    }
-    if (locations.length > 6) {
-      return res.status(400).json({ error: 'Maximum 6 locations allowed for comparison' });
-    }
-
-    const results = await Promise.all(locations.map(async (loc) => {
-      const latNum = parseFloat(loc.lat);
-      const lonNum = parseFloat(loc.lon);
-      const rangeDeg = parseFloat(loc.rangeDeg) || 5;
-
-      if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
-        return { label: loc.label || 'Unknown', lat: latNum, lon: lonNum, records: [], error: 'Invalid coordinates' };
-      }
-
-      let records = [];
-      try {
-        // Fetch Live Argovis ARGO Profiles directly for multi-depth comparison curves (0m - 2000m)
-        const argovisData = await fetchArgovisProfiles(latNum, lonNum, Math.max(rangeDeg, 10));
-        if (argovisData && argovisData.profiles && argovisData.profiles.length > 0) {
-          argovisData.profiles.forEach(p => {
-            (p.measurements || []).forEach(m => {
-              if (m.depth != null && (m.temp != null || m.sal != null || m.oxy != null)) {
-                records.push({
-                  depth: m.depth,
-                  temperature: m.temp,
-                  salinity: m.sal,
-                  oxygen: m.oxy,
-                  pressure: m.depth,
-                  latitude: p.lat,
-                  longitude: p.lon
-                });
-              }
-            });
-          });
-        }
-
-        // Fallback to local DB if Argovis returned no profiles for this coordinate
-        if (records.length === 0) {
-          const dbLon = lonNum < 0 ? lonNum + 360 : lonNum;
-          const dbRes = await client.query(
-            `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
-             FROM t1
-             WHERE latitude BETWEEN $1 AND $2 AND longitude BETWEEN $3 AND $4
-             ORDER BY depth ASC LIMIT 1000`,
-            [latNum - rangeDeg, latNum + rangeDeg, dbLon - rangeDeg, dbLon + rangeDeg]
-          );
-          records = (dbRes.rows || []).map(normalizeMetrics);
-        }
-
-        return {
-          label: loc.label || `${latNum.toFixed(1)}°, ${lonNum.toFixed(1)}°`,
-          lat: latNum, lon: lonNum,
-          records
-        };
-      } catch (e) {
-        return { label: loc.label || 'Error', lat: latNum, lon: lonNum, records: [], error: e.message };
+    // Fetch available tools from MCP
+    const toolsResp = await mcp.listTools();
+    const groqTools = toolsResp.tools.map(tool => ({
+      type: "function",
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema
       }
     }));
 
-    res.json({ locations: results });
-  } catch (err) {
-    console.error('Compare endpoint failed:', err);
-    res.status(500).json({ error: 'Failed to compare locations.' });
-  }
-});
+    // Setup initial messages
+    let systemPrompt = "You are floatCHAT — your ocean data assistant. You have access to tools to search ocean knowledge and query live ARGO data. Use them when necessary to answer the user's questions. CRITICAL RULE: When you receive data summaries from the database, explain them naturally and conversationally to the user in 1-3 sentences. Do not just copy-paste the raw summary text.";
 
-app.get("/profiles", async (req, res) => {
-  try {
-    const lat = parseFloat(req.query.lat);
-    const lon = parseFloat(req.query.lon);
-    const rangeDeg = parseFloat(req.query.rangeDeg) || 10;
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      return res.json([]);
-    }
+    const groqMessages = [{ role: 'system', content: systemPrompt }];
+    messages.forEach(m => {
+      if (m.role === 'user' || m.role === 'assistant') {
+        groqMessages.push({ role: m.role, content: m.content });
+      }
+    });
 
-    // Fetch Live Argovis ARGO Profiles for multi-depth profile curves (0m - 2000m)
-    const argovisData = await fetchArgovisProfiles(lat, lon, rangeDeg);
-    let records = [];
+    let summaries = []; // For frontend charts
+    let totalRowsUsed = 0;
 
-    if (argovisData && argovisData.profiles && argovisData.profiles.length > 0) {
-      argovisData.profiles.forEach(p => {
-        (p.measurements || []).forEach(m => {
-          if (m.depth != null && (m.temp != null || m.sal != null || m.oxy != null)) {
-            records.push({
-              depth: m.depth,
-              temperature: m.temp,
-              salinity: m.sal,
-              oxygen: m.oxy,
-              pressure: m.depth
-            });
-          }
-        });
+    // Loop for tool calling (up to 10 iterations)
+    for (let i = 0; i < 10; i++) {
+      const groqReq = {
+        model: 'openai/gpt-oss-120b',
+        messages: groqMessages,
+        tools: groqTools,
+        tool_choice: "auto",
+        temperature: 0.1
+      };
+
+      const finalResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify(groqReq)
       });
-    }
 
-    // Fallback to DB if Argovis returned no profile points
-    if (records.length === 0) {
-      try {
-        const dbLon = lon < 0 ? lon + 360 : lon;
-        const dbRes = await client.query(
-          `SELECT depth, temperature, salinity, oxygen, pressure 
-           FROM t1 
-           WHERE latitude BETWEEN $1 AND $2 AND longitude BETWEEN $3 AND $4
-           ORDER BY depth ASC LIMIT 500`,
-          [lat - rangeDeg, lat + rangeDeg, dbLon - rangeDeg, dbLon + rangeDeg]
-        );
-        records = (dbRes.rows || []).map(normalizeMetrics);
-      } catch (e) {
-        records = [];
+      if (!finalResp.ok) {
+        const errText = await finalResp.text();
+        return res.status(500).json({ error: 'Groq API error', details: errText });
+      }
+
+      const data = await finalResp.json();
+      const responseMessage = data.choices[0].message;
+
+      // Add model's response to history
+      groqMessages.push(responseMessage);
+
+      if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+        // Model wants to call a tool
+        for (const toolCall of responseMessage.tool_calls) {
+          const name = toolCall.function.name;
+          const args = JSON.parse(toolCall.function.arguments);
+
+          console.log(`LLM called tool: ${name} with args:`, args);
+
+          // Execute tool via MCP
+          const result = await mcp.callTool({ name, arguments: args });
+          let resultText = result.content[0].text;
+
+          // If it's the database query, extract chart data for the frontend
+          if (name === "query_argo_database") {
+            try {
+              const parsed = JSON.parse(resultText);
+              totalRowsUsed += parsed.rowCount;
+              if (parsed.rowCount > 0) {
+                const rows = parsed.data;
+                const nums = (arr) => arr.filter(n => n !== null && n !== undefined).map(Number).filter(n => Number.isFinite(n));
+                const stat = (v) => {
+                  const vals = nums(v);
+                  if (!vals.length) return null;
+                  return { count: vals.length, min: Math.min(...vals), max: Math.max(...vals), mean: parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2)) };
+                };
+                summaries.push({
+                  region: { name: args.locationName || `Region (${args.latitude.toFixed(1)}, ${args.longitude.toFixed(1)})`, center: { lat: args.latitude, lon: args.longitude }, rangeDeg: args.rangeDeg, year: args.year || "All Years" },
+                  totals: parsed.rowCount,
+                  depth: stat(rows.map(r => r.depth)),
+                  temperature: stat(rows.map(r => r.temperature)),
+                  salinity: stat(rows.map(r => r.salinity)),
+                  oxygen: stat(rows.map(r => r.oxygen)),
+                  points: rows.slice(0, 300)
+                });
+                const depthStat = stat(rows.map(r => r.depth));
+                const tempStat = stat(rows.map(r => r.temperature));
+                const salStat = stat(rows.map(r => r.salinity));
+                const oxyStat = stat(rows.map(r => r.oxygen));
+                // Condense text for LLM to avoid context overflow
+                resultText = `Database search successful. Found ${parsed.rowCount} records. ` +
+                  (depthStat ? `Depth ranged ${depthStat.min} - ${depthStat.max} m (mean ${depthStat.mean} m), ` : '') +
+                  (tempStat ? `Temperature ${tempStat.min} - ${tempStat.max}°C (mean ${tempStat.mean}°C), ` : '') +
+                  (salStat ? `Salinity ${salStat.min} - ${salStat.max} PSU (mean ${salStat.mean} PSU), ` : '') +
+                  (oxyStat ? `Oxygen ${oxyStat.min} - ${oxyStat.max} µmol/kg (mean ${oxyStat.mean} µmol/kg).` : '');
+              } else {
+                resultText = "Database returned 0 rows.";
+              }
+            } catch (e) {
+              console.error("Error parsing DB tool output", e);
+            }
+          }
+
+          groqMessages.push({
+            tool_call_id: toolCall.id,
+            role: "tool",
+            name: name,
+            content: resultText,
+          });
+        }
+        // Loop back to send tool results to LLM
+      } else {
+        // Final textual response received
+        return res.json({ text: responseMessage.content || '', usedRows: totalRowsUsed, plottingData: summaries });
       }
     }
 
-    res.json(records);
+    // Fallback if loop exceeded
+    res.json({ text: groqMessages[groqMessages.length - 1].content || 'Max tool iterations reached.', usedRows: totalRowsUsed, plottingData: summaries });
+
   } catch (err) {
-    console.error("GET /profiles error:", err);
-    res.json([]);
+    console.error("Chat error:", err);
+    res.status(500).json({ error: err.message || 'Chat failed' });
   }
 });
 
 app.get("/everything", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT * FROM t1 ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 100"
+      "SELECT * FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -732,10 +307,7 @@ app.get("/latlong", async (req, res) => {
   const { lat, lon } = req.query;
   const latNum = parseFloat(lat);
   const lonNum = parseFloat(lon);
-  if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
-    return res.status(400).json({ error: 'lat and lon parameters must be valid numbers' });
-  }
-  const dbLon = lonNum < 0 ? lonNum + 360 : lonNum;
+  let dbLon = lonNum < 0 ? lonNum + 360 : lonNum;
   try {
     const result = await client.query(
       "SELECT * FROM t1 WHERE latitude=$1 AND longitude=$2 ORDER BY time_ts ASC, depth ASC LIMIT 50",
@@ -752,7 +324,7 @@ app.get("/latlong", async (req, res) => {
 app.get("/temperature", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, temperature FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, temperature, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -765,7 +337,7 @@ app.get("/temperature", async (req, res) => {
 app.get("/pressure", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, pressure FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND pressure IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, pressure, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND pressure IS NOT NULL AND time_ts IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -778,7 +350,7 @@ app.get("/pressure", async (req, res) => {
 app.get("/salinity", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, salinity FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, salinity, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -791,7 +363,7 @@ app.get("/salinity", async (req, res) => {
 app.get("/oxygen", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, oxygen FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, oxygen, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -804,7 +376,7 @@ app.get("/oxygen", async (req, res) => {
 app.get("/nitrate", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, nitrate FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND nitrate IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, nitrate, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND nitrate IS NOT NULL AND time_ts IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts DESC"
     );
     res.json(result.rows);
   } catch (err) {
@@ -816,7 +388,7 @@ app.get("/nitrate", async (req, res) => {
 app.get("/depth", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, depth FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND depth IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, depth, EXTRACT(YEAR FROM time_ts) as year FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND depth IS NOT NULL AND time_ts IS NOT NULL ORDER BY time_ts DESC"
     );
     const rows = (result.rows || []).map(normalizeMetrics);
     res.json(rows);
@@ -832,6 +404,7 @@ app.get("/profiles", async (req, res) => {
     const latNum = parseFloat(lat);
     const lonNum = parseFloat(lon);
     const rangeNum = parseFloat(rangeDeg);
+    let dbLon = lonNum < 0 ? lonNum + 360 : lonNum;
 
     if (!Number.isFinite(latNum) || !Number.isFinite(lonNum) || !Number.isFinite(rangeNum)) {
       return res.status(400).json({ error: "lat, lon, rangeDeg (numbers) are required" });
@@ -839,10 +412,11 @@ app.get("/profiles", async (req, res) => {
 
     const dbLon = lonNum < 0 ? lonNum + 360 : lonNum;
 
-    const latMin = latNum - rangeNum;
-    const latMax = latNum + rangeNum;
-    const lonMin = dbLon - rangeNum;
-    const lonMax = dbLon + rangeNum;
+    const effectiveRange = rangeNum === 0 ? 0.01 : rangeNum;
+    const latMin = latNum - effectiveRange;
+    const latMax = latNum + effectiveRange;
+    const lonMin = dbLon - effectiveRange;
+    const lonMax = dbLon + effectiveRange;
 
     const result = await client.query(
       `SELECT latitude, longitude, depth, temperature, salinity, oxygen, time_ts
@@ -850,8 +424,8 @@ app.get("/profiles", async (req, res) => {
        WHERE latitude BETWEEN $1 AND $2
          AND longitude BETWEEN $3 AND $4
          AND depth IS NOT NULL
-       ORDER BY time_ts ASC, depth ASC
-       LIMIT 5000`,
+         AND time_ts IS NOT NULL
+       ORDER BY time_ts ASC, depth ASC`,
       [latMin, latMax, lonMin, lonMax]
     );
     const rows = (result.rows || []).map(normalizeMetrics);
@@ -865,7 +439,7 @@ app.get("/profiles", async (req, res) => {
 app.get("/time", async (req, res) => {
   try {
     const result = await client.query(
-      "SELECT latitude, longitude, time_ts FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL ORDER BY time_ts ASC, latitude ASC, longitude ASC LIMIT 5000"
+      "SELECT latitude, longitude, time_ts FROM t1 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND time_ts IS NOT NULL ORDER BY time_ts DESC"
     );
     res.json(result.rows);
   } catch (err) {
@@ -893,73 +467,7 @@ app.get("/api/obis/species", async (req, res) => {
   }
 });
 
-app.get("/api/argovis/profiles", async (req, res) => {
-  try {
-    const lat = parseFloat(req.query.lat);
-    const lon = parseFloat(req.query.lon);
-    const rangeDeg = parseFloat(req.query.rangeDeg) || 5;
-    const startDate = req.query.startDate || null;
-    const endDate = req.query.endDate || null;
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      return res.status(400).json({ error: "lat and lon query parameters are required" });
-    }
-    const argovisData = await fetchArgovisProfiles(lat, lon, rangeDeg, startDate, endDate);
-    if (!argovisData) {
-      return res.status(500).json({ error: "Failed to fetch Argovis profiles" });
-    }
-    res.json(argovisData);
-  } catch (err) {
-    console.error("Argovis API endpoint error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/argovis/global", async (req, res) => {
-  try {
-    const points = await fetchGlobalArgovisPoints();
-    res.json(points || []);
-  } catch (err) {
-    console.error("Global Argovis endpoint error:", err);
-    res.json([]);
-  }
-});
-
-app.get("/api/argovis/live_points", async (req, res) => {
-  try {
-    if (!req.query.lat && !req.query.lon) {
-      const globalPoints = await fetchGlobalArgovisPoints();
-      return res.json(globalPoints);
-    }
-    const lat = parseFloat(req.query.lat) || 15;
-    const lon = parseFloat(req.query.lon) || 65;
-    const rangeDeg = parseFloat(req.query.rangeDeg) || 30;
-    const data = await fetchArgovisProfiles(lat, lon, rangeDeg);
-    if (!data || !data.profiles) {
-      return res.json([]);
-    }
-    const points = data.profiles.map(p => {
-      const topM = p.measurements[0] || {};
-      return {
-        id: `argovis_${p.floatId}`,
-        latitude: p.lat,
-        longitude: p.lon,
-        depth: topM.depth != null ? topM.depth : 10,
-        temperature: topM.temp,
-        salinity: topM.sal,
-        oxygen: topM.oxy,
-        pressure: topM.depth,
-        floatId: p.floatId,
-        timestamp: p.timestamp,
-        isArgovis: true,
-        source: 'Argovis (Colorado)'
-      };
-    });
-    res.json(points);
-  } catch (err) {
-    console.error("Argovis live points error:", err);
-    res.json([]);
-  }
-});
+// The `/ai/chat` proxy to Google Gemini has been removed as it is now integrated above
 
 app.listen(port, () => {
   console.log(`API running at http://localhost:${port}`);

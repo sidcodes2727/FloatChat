@@ -24,11 +24,13 @@ const fallbackData = [
   { id: 3, depth: 15, pressure: 7, temperature: 30, latitude: 22.6, longitude: 88.4 },
 ];
 
-export default function OceanMap({ setActivePage, onPointClick }) {
+export default function OceanMap({ setActivePage, onMapClick }) {
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
   const [data, setData] = useState([]);
   const [argovisCount, setArgovisCount] = useState(0);
   const [hoverInfo, setHoverInfo] = useState(null); // {x,y,coordinate,object}
+  const [selectedYear, setSelectedYear] = useState('All');
+  const [availableYears, setAvailableYears] = useState([]);
 
   useEffect(() => {
     async function fetchData() {
@@ -51,9 +53,26 @@ export default function OceanMap({ setActivePage, onPointClick }) {
             const cleaned = dbData.map(d => ({
               ...d,
               longitude: d.longitude > 180 ? d.longitude - 360 : d.longitude,
+              year: d.year != null ? Number(d.year) : null,
             }));
-            setData(cleaned);
+
+          if (cleaned.length) {
+            const avgLat =
+              cleaned.reduce((sum, d) => sum + d.latitude, 0) / cleaned.length;
+            const avgLon =
+              cleaned.reduce((sum, d) => sum + d.longitude, 0) / cleaned.length;
+            setViewState((v) => ({
+              ...v,
+              latitude: avgLat,
+              longitude: avgLon,
+              zoom: 6,
+            }));
           }
+          setData(cleaned);
+          const years = [...new Set(cleaned.map(d => d.year).filter(y => y != null))].sort((a, b) => b - a);
+          setAvailableYears(years);
+        } else {
+          setData(fallbackData);
         }
       } catch (e) {
         console.error('Error fetching global Argovis map data:', e);
@@ -63,8 +82,12 @@ export default function OceanMap({ setActivePage, onPointClick }) {
     fetchData();
   }, []);
 
-  // Ensure only valid points are passed to DeckGL
-  const safePoints = (data || []).filter(
+  const filteredData = selectedYear === 'All' 
+    ? data 
+    : data.filter(d => d.year === selectedYear);
+
+  // Ensure only valid points are passed to DeckGL to avoid runtime errors
+  const safePoints = (filteredData || []).filter(
     (d) =>
       d &&
       Number.isFinite(Number(d.latitude)) &&
@@ -73,7 +96,7 @@ export default function OceanMap({ setActivePage, onPointClick }) {
       Math.abs(Number(d.longitude)) <= 180
   );
 
-  const layers = [
+    const layers = [
     new ScatterplotLayer({
       id: 'depth-points',
       data: safePoints,
@@ -89,9 +112,13 @@ export default function OceanMap({ setActivePage, onPointClick }) {
       getLineColor: [0, 0, 0, 150],
       lineWidthMinPixels: 0.5,
       getFillColor: (d) => {
-        if (d.floatType === 'bgc') return [34, 197, 94];   // 🟢 Green for BGC Floats
-        if (d.floatType === 'deep') return [59, 130, 246];  // 🔵 Blue for Deep Floats
-        return [250, 204, 21];                             // 🟡 Yellow for Core Floats
+        const z = Number(d.depth);
+        if (!Number.isFinite(z)) return [150, 150, 150];
+        const t = Math.max(0, Math.min(1, z / 5000));
+        const r = 0;
+        const g = Math.floor(200 - 120 * t);
+        const b = Math.floor(255 - 80 * t);
+        return [r, g, b];
       },
       onHover: (info) => {
         if (!info || !info.coordinate || !info.object) {
@@ -101,20 +128,31 @@ export default function OceanMap({ setActivePage, onPointClick }) {
         setHoverInfo({ x: info.x, y: info.y, coordinate: info.coordinate, object: info.object });
       },
       onClick: (info) => {
-        if (info && info.object && onPointClick) {
-          onPointClick(info.object.latitude, info.object.longitude);
+        if (info && info.coordinate && onMapClick) {
+           onMapClick(info.coordinate[1], info.coordinate[0]);
         }
-      },
+      }
     }),
   ];
 
-  const coreCount = safePoints.filter(p => p.floatType === 'core').length;
-  const bgcCount = safePoints.filter(p => p.floatType === 'bgc').length;
-  const deepCount = safePoints.filter(p => p.floatType === 'deep').length;
+  const renderMiniChart = (label, val, max, color) => {
+      if (val == null) return null;
+      const pct = Math.min(100, Math.max(0, (val / max) * 100));
+      return (
+         <div className="mt-1.5">
+            <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+               <span>{label}</span>
+               <span className="font-mono">{Number(val).toFixed(1)}</span>
+            </div>
+            <div className="w-full bg-black/40 h-1.5 rounded-full overflow-hidden">
+               <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+            </div>
+         </div>
+      );
+  };
 
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-      {/* Back to Home */}
       <button
         onClick={() => setActivePage('Home')}
         className="absolute top-3 left-3 z-10 flex items-center gap-1.5 px-3 py-1.5 glass-subtle rounded-lg text-sm text-white/70 hover:text-white hover:bg-white/8 transition-all duration-200"
@@ -123,26 +161,20 @@ export default function OceanMap({ setActivePage, onPointClick }) {
         Back
       </button>
 
-      {/* Point count badge & Argovis Legend */}
-      <div className="absolute top-3 right-3 z-10 glass-subtle rounded-lg px-3.5 py-2 flex items-center gap-3 shadow-xl backdrop-blur-md border border-white/10">
-        <div className="flex items-center gap-1.5">
-          <Layers size={14} className="text-cyan-400" />
-          <span className="text-xs font-semibold text-white/90">{safePoints.length.toLocaleString()} Global Floats</span>
-        </div>
-        <div className="h-4 w-px bg-white/15" />
-        <div className="flex items-center gap-2.5 text-[11px] font-medium">
-          <span className="flex items-center gap-1 text-yellow-400">
-            <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 shadow-[0_0_8px_#facc15]" />
-            Core ({coreCount})
-          </span>
-          <span className="flex items-center gap-1 text-green-400">
-            <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]" />
-            BGC ({bgcCount})
-          </span>
-          <span className="flex items-center gap-1 text-blue-400">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]" />
-            Deep ({deepCount})
-          </span>
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+        <select
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(e.target.value === 'All' ? 'All' : Number(e.target.value))}
+          className="glass-subtle rounded-lg px-2 py-1.5 text-xs text-white/80 bg-transparent border-none outline-none cursor-pointer"
+        >
+          <option value="All" className="bg-[#040c1a]">All Years</option>
+          {availableYears.map(year => (
+            <option key={year} value={year} className="bg-[#040c1a]">{year}</option>
+          ))}
+        </select>
+        <div className="glass-subtle rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+          <Layers size={12} className="text-[var(--accent)]" />
+          <span className="text-xs text-white/60">{safePoints.length.toLocaleString()} points</span>
         </div>
       </div>
 
@@ -168,43 +200,25 @@ export default function OceanMap({ setActivePage, onPointClick }) {
         <div
           style={{
             position: 'absolute',
-            left: Math.min(Math.max(8, hoverInfo.x + 12), window.innerWidth - 250),
-            top: Math.min(Math.max(8, hoverInfo.y + 12), window.innerHeight - 150)
+            left: Math.min(Math.max(8, hoverInfo.x + 12), window.innerWidth - 240),
+            top: Math.min(Math.max(8, hoverInfo.y + 12), window.innerHeight - 180)
           }}
-          className="tooltip-card"
+          className="tooltip-card min-w-[160px]"
         >
-          {hoverInfo.object && (
-            <div className="mb-1">
-              {hoverInfo.object.floatType === 'bgc' && (
-                <div className="text-[11px] uppercase font-bold text-green-400 flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-green-400" /> 🟢 ARGO BGC Float #{hoverInfo.object.floatId}
-                </div>
-              )}
-              {hoverInfo.object.floatType === 'deep' && (
-                <div className="text-[11px] uppercase font-bold text-blue-400 flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-blue-400" /> 🔵 Deep ARGO Float #{hoverInfo.object.floatId}
-                </div>
-              )}
-              {(!hoverInfo.object.floatType || hoverInfo.object.floatType === 'core') && (
-                <div className="text-[11px] uppercase font-bold text-yellow-400 flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-yellow-400" /> 🟡 ARGO Core Float #{hoverInfo.object.floatId || hoverInfo.object.id}
-                </div>
-              )}
-            </div>
-          )}
-          <div className="text-white/60 text-[11px] mb-1">
-            {hoverInfo.coordinate[1].toFixed(3)}°, {hoverInfo.coordinate[0].toFixed(3)}°
+          <div className="text-white/90 text-xs font-bold mb-2 border-b border-white/10 pb-1 flex justify-between">
+            <span>Float Point</span>
+            <span className="text-white/40">{hoverInfo.coordinate[1].toFixed(2)}°, {hoverInfo.coordinate[0].toFixed(2)}°</span>
           </div>
-          {hoverInfo.object && (
-            <div className="text-white/80 text-xs">
-              <div>Cycle: <span className="text-cyan-300 font-semibold">{hoverInfo.object.cycle || 'Active'}</span></div>
-              {hoverInfo.object.temperature != null && (
-                <div>Temp: <span className="text-amber-400 font-semibold">{Number(hoverInfo.object.temperature).toFixed(2)}</span> °C</div>
-              )}
-              {hoverInfo.object.salinity != null && (
-                <div>Salinity: <span className="text-purple-400 font-semibold">{Number(hoverInfo.object.salinity).toFixed(2)}</span> PSU</div>
-              )}
+          {hoverInfo.object ? (
+            <div>
+               {hoverInfo.object.year && <div className="text-[10px] text-white/60 mb-1">Year: {hoverInfo.object.year}</div>}
+               {renderMiniChart('Depth (m)', hoverInfo.object.depth, 2000, '#00d4ff')}
+               {renderMiniChart('Temp (°C)', hoverInfo.object.temperature, 35, '#ff8a65')}
+               {renderMiniChart('Salinity (PSU)', hoverInfo.object.salinity, 40, '#aed581')}
+               <div className="text-[9px] text-white/40 mt-3 text-center italic">Click to analyze with AI</div>
             </div>
+          ) : (
+            <div className="text-white/40 text-xs">No point under cursor</div>
           )}
         </div>
       )}

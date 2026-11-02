@@ -67,35 +67,32 @@ function toRgb(c) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-export default function MetricMap({ metric = 'salinity', onPointClick }) {
+export default function MetricMap({ metric = 'salinity', onMapClick }) {
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
   const [rows, setRows] = useState([]);
   const [error, setError] = useState(null);
   const [hoverInfo, setHoverInfo] = useState(null); // {x,y,coordinate,object}
   const [land, setLand] = useState(null); // Natural Earth land polygons
+  const [selectedYear, setSelectedYear] = useState('All');
+  const [availableYears, setAvailableYears] = useState([]);
 
   useEffect(() => {
     async function load() {
       try {
         setError(null);
-        const res = await fetch(`${API_BASE}/api/argovis/global`);
-        const rawArgovis = await res.json();
-
-        let cleaned = [];
-        if (Array.isArray(rawArgovis) && rawArgovis.length > 0) {
-          cleaned = rawArgovis.filter(
-            d => d && d.latitude != null && d.longitude != null && Math.abs(d.latitude) <= 90 && Math.abs(d.longitude) <= 360
-          );
-        } else {
-          // Fallback to local metric endpoint
-          const localRes = await fetch(`${API_BASE}/${metric}`);
-          const dbData = await localRes.json();
-          if (Array.isArray(dbData)) {
-            cleaned = dbData.filter(d => d.latitude != null && d.longitude != null);
-          }
-        }
-
+        const res = await fetch(`${API_BASE}/${metric}`);
+        const data = await res.json();
+        const cleaned = (Array.isArray(data) ? data : []).filter(
+          d => d.latitude != null && d.longitude != null && Math.abs(d.latitude) <= 90 && Math.abs(d.longitude) <= 360
+        ).map(d => ({ ...d, year: d.year != null ? Number(d.year) : null }));
         setRows(cleaned);
+        if (cleaned.length) {
+          const avgLat = cleaned.reduce((s, d) => s + Number(d.latitude), 0) / cleaned.length;
+          const avgLon = cleaned.reduce((s, d) => s + (Number(d.longitude) > 180 ? Number(d.longitude) - 360 : Number(d.longitude)), 0) / cleaned.length;
+          setViewState(v => ({ ...v, latitude: avgLat, longitude: avgLon, zoom: 3 }));
+          const years = [...new Set(cleaned.map(d => d.year).filter(y => y != null))].sort((a, b) => b - a);
+          setAvailableYears(years);
+        }
       } catch (e) {
         setError(e.message || 'Failed to load global map data');
       }
@@ -168,10 +165,14 @@ export default function MetricMap({ metric = 'salinity', onPointClick }) {
     [250, 60, 160, 255]
   ]), []);
 
+  const filteredRows = useMemo(() => {
+    return selectedYear === 'All' ? rows : rows.filter(d => d.year === selectedYear);
+  }, [rows, selectedYear]);
+
   // Heatmap layer for continuous surface
   const heatmapLayer = useMemo(() => new HeatmapLayer({
     id: `${metric}-heat`,
-    data: rows,
+    data: filteredRows,
     getPosition: (d) => [Number(d.longitude) > 180 ? Number(d.longitude) - 360 : Number(d.longitude), Number(d.latitude)],
     getWeight: (d) => {
       const raw = d[metric] ?? d.value;
@@ -186,12 +187,12 @@ export default function MetricMap({ metric = 'salinity', onPointClick }) {
     threshold: 0.05,
     colorRange: metric === 'salinity' ? SALINITY_RANGE : metric === 'pressure' ? PRESSURE_RANGE : TEMP_RANGE,
     weightsTextureSize: 512,
-  }), [rows, metric, viewState, TEMP_RANGE, SALINITY_RANGE, PRESSURE_RANGE]);
+  }), [filteredRows, metric, viewState, TEMP_RANGE, SALINITY_RANGE, PRESSURE_RANGE]);
 
   // Black dot markers for actual coordinates
   const pointsLayer = useMemo(() => new ScatterplotLayer({
     id: `${metric}-points`,
-    data: rows,
+    data: filteredRows,
     pickable: true,
     opacity: 0.95,
     radiusScale: 10,
@@ -212,12 +213,11 @@ export default function MetricMap({ metric = 'salinity', onPointClick }) {
       setHoverInfo({ x: info.x, y: info.y, coordinate: info.coordinate, object: info.object });
     },
     onClick: (info) => {
-      if (info && info.object && onPointClick) {
-        const displayLon = Number(info.object.longitude) > 180 ? Number(info.object.longitude) - 360 : Number(info.object.longitude);
-        onPointClick(Number(info.object.latitude), displayLon);
+      if (info && info.coordinate && onMapClick) {
+         onMapClick(info.coordinate[1], info.coordinate[0]);
       }
     },
-  }), [rows, metric, onPointClick]);
+  }), [filteredRows, metric, onMapClick]);
 
   // Land mask layer (overdraw on top to hide heat on land)
   const landMask = useMemo(() => {
@@ -250,6 +250,22 @@ export default function MetricMap({ metric = 'salinity', onPointClick }) {
     return { ...spec, gradient, mid };
   }, [metric]);
 
+  const renderMiniChart = (label, val, max, color) => {
+      if (val == null) return null;
+      const pct = Math.min(100, Math.max(0, (val / max) * 100));
+      return (
+         <div className="mt-1.5">
+            <div className="flex justify-between text-[10px] text-white/70 mb-0.5">
+               <span>{label}</span>
+               <span className="font-mono">{Number(val).toFixed(1)}</span>
+            </div>
+            <div className="w-full bg-black/40 h-1.5 rounded-full overflow-hidden">
+               <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+            </div>
+         </div>
+      );
+  };
+
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
       <DeckGL
@@ -260,6 +276,19 @@ export default function MetricMap({ metric = 'salinity', onPointClick }) {
       >
         <Map mapLib={maplibregl} reuseMaps mapStyle={MAP_STYLE} attributionControl={false} {...viewState} />
       </DeckGL>
+      {/* HUD Info */}
+      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 items-end">
+        <select
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(e.target.value === 'All' ? 'All' : Number(e.target.value))}
+          className="glass-subtle rounded-lg px-2 py-1.5 text-xs text-white/80 bg-[rgba(2,10,22,0.7)] border-none outline-none cursor-pointer"
+        >
+          <option value="All" className="bg-[#040c1a]">All Years</option>
+          {availableYears.map(year => (
+            <option key={year} value={year} className="bg-[#040c1a]">{year}</option>
+          ))}
+        </select>
+      </div>
       {/* Color Legend */}
       <div
         style={{ position: 'absolute', left: 12, bottom: 12, width: 240 }}
@@ -281,24 +310,22 @@ export default function MetricMap({ metric = 'salinity', onPointClick }) {
           style={{
             position: 'absolute',
             left: Math.min(Math.max(8, hoverInfo.x + 12), window.innerWidth - 240),
-            top: Math.min(Math.max(8, hoverInfo.y + 12), window.innerHeight - 110),
+            top: Math.min(Math.max(8, hoverInfo.y + 12), window.innerHeight - 150),
           }}
-          className="tooltip-card"
+          className="tooltip-card min-w-[160px]"
         >
-          <div className="text-white/50 text-[11px] mb-1">
-            {hoverInfo.coordinate[1].toFixed(3)}°, {hoverInfo.coordinate[0].toFixed(3)}°
+          <div className="text-white/90 text-xs font-bold mb-2 border-b border-white/10 pb-1 flex justify-between">
+            <span>Float Point</span>
+            <span className="text-white/40">{hoverInfo.coordinate[1].toFixed(2)}°, {hoverInfo.coordinate[0].toFixed(2)}°</span>
           </div>
           {hoverInfo.object ? (
-            <div className="text-white/80 text-xs">
-              {metric === 'temperature' && (
-                <div>Temperature: <span className="text-[var(--accent)] font-semibold">{(Number.isFinite(Number(hoverInfo.object.temperature)) ? Number(hoverInfo.object.temperature) : 0).toFixed(2)}</span> °C</div>
-              )}
-              {metric === 'salinity' && (
-                <div>Salinity: <span className="text-[var(--accent)] font-semibold">{(Number.isFinite(Number(hoverInfo.object.salinity)) ? Number(hoverInfo.object.salinity) : 0).toFixed(2)}</span> PSU</div>
-              )}
-              {metric === 'pressure' && (
-                <div>Pressure: <span className="text-[var(--accent)] font-semibold">{(Number.isFinite(Number(hoverInfo.object.pressure)) ? Number(hoverInfo.object.pressure) : 0).toFixed(2)}</span> dbar</div>
-              )}
+            <div>
+               {hoverInfo.object.year && <div className="text-[10px] text-white/60 mb-1">Year: {hoverInfo.object.year}</div>}
+               {renderMiniChart('Depth (m)', hoverInfo.object.depth, 2000, '#00d4ff')}
+               {metric === 'temperature' && renderMiniChart('Temp (°C)', hoverInfo.object.temperature, 35, '#ff8a65')}
+               {metric === 'salinity' && renderMiniChart('Salinity (PSU)', hoverInfo.object.salinity, 40, '#aed581')}
+               {metric === 'pressure' && renderMiniChart('Pressure (dbar)', hoverInfo.object.pressure, 2000, '#ba68c8')}
+               <div className="text-[9px] text-white/40 mt-3 text-center italic">Click to analyze with AI</div>
             </div>
           ) : (
             <div className="text-white/40 text-xs">No point under cursor</div>

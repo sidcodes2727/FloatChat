@@ -128,8 +128,8 @@ function MessageBubble({ message }) {
 }
 
 /* ─── Chatbot panel ─── */
-export default function Chatbot({ chatOpen, setChatOpen, selectedCoords, onDataVisualized, onCompareLocations }) {
-    const SYSTEM_INSTRUCTIONS = "You are floatCHAT. Provide structured, informative answers with data summaries, oceanographic context, and relevant marine life/vegetation insights. Use clear subheadings and bullet points.";
+export default function Chatbot({ chatOpen, setChatOpen, chatInput, setChatInput, setChatPlotsData }) {
+    const CONCISE_INSTRUCTIONS = "You are floatCHAT. Answer very concisely (1–2 sentences). Use ARGO data when provided. Include numbers with units. If uncertain, say so briefly.";
 
     const [messages, setMessages] = useState([
         { id: 1, role: 'assistant', content: "Hi! I'm floatCHAT — your ocean data assistant. Ask me about ARGO floats, temperature, salinity, or any oceanographic data." }
@@ -137,13 +137,14 @@ export default function Chatbot({ chatOpen, setChatOpen, selectedCoords, onDataV
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [contextOpen, setContextOpen] = useState(false);
     const listRef = useRef(null);
 
-    const [lat, setLat] = useState("");
-    const [lon, setLon] = useState("");
-    const [rangeDeg, setRangeDeg] = useState("");
-    const hasContext = Number.isFinite(parseFloat(lat)) && Number.isFinite(parseFloat(lon)) && Number.isFinite(parseFloat(rangeDeg));
+    useEffect(() => {
+        if (chatInput) {
+            setInput(chatInput);
+            setChatInput('');
+        }
+    }, [chatInput, setChatInput]);
 
     useEffect(() => {
         if (!listRef.current) return;
@@ -184,25 +185,24 @@ export default function Chatbot({ chatOpen, setChatOpen, selectedCoords, onDataV
         }
 
         try {
-            const endpoint = hasContext ? `${API_BASE}/ai/chat_context` : `${API_BASE}/ai/chat`;
-            const baseMsgs = [{ role: 'user', content: SYSTEM_INSTRUCTIONS }, ...messages, userMsg];
-            const payload = hasContext
-                ? { messages: baseMsgs.map(m => ({ role: m.role, content: m.content })), lat: parseFloat(lat), lon: parseFloat(lon), rangeDeg: parseFloat(rangeDeg) }
-                : { messages: baseMsgs.map(m => ({ role: m.role, content: m.content })) };
+            const endpoint = `${API_BASE}/ai/chat`;
+            const baseMsgs = [{ role: 'user', content: CONCISE_INSTRUCTIONS }, ...messages, userMsg];
+            const payload = { messages: baseMsgs.map(m => ({ role: m.role, content: m.content })) };
             const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data?.error || 'Failed to get response');
-            
-            const reply = (data?.text || '').trim() || "I'm not sure how to answer that yet.";
+            if (!res.ok) {
+                const errorMsg = data?.details ? `${data.error}: ${data.details}` : (data?.error || 'Failed to get response');
+                throw new Error(errorMsg);
+            }
+            const raw = (data?.text || '').trim() || "I'm not sure how to answer that yet.";
+            const reply = raw;
             setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: reply }]);
-
-            // If single location query (not comparison), trigger visualization panel for extracted coords
-            if (!isComparison && data?.extractedCoords && onDataVisualized) {
-                onDataVisualized(data.extractedCoords.lat, data.extractedCoords.lon);
+            if (data?.plottingData && setChatPlotsData) {
+                setChatPlotsData(data.plottingData);
             }
         } catch (e) {
             setError(e.message || 'Something went wrong');
@@ -259,8 +259,8 @@ export default function Chatbot({ chatOpen, setChatOpen, selectedCoords, onDataV
                             </div>
                             <div>
                                 <h3
-                                    className="text-sm font-bold text-white leading-none"
-                                    style={{ fontFamily: "'Space Grotesk', Inter, sans-serif" }}
+                                    className="text-lg text-white leading-none font-bold"
+                                    style={{ fontFamily: "'Shark Heavy', sans-serif", letterSpacing: '1px' }}
                                 >
                                     floatCHAT
                                 </h3>
@@ -299,54 +299,7 @@ export default function Chatbot({ chatOpen, setChatOpen, selectedCoords, onDataV
                         </div>
                     </div>
 
-                    {/* ── Location Context ── */}
-                    <div className="shrink-0" style={{ borderBottom: '1px solid rgba(0,212,255,0.07)' }}>
-                        <button
-                            onClick={() => setContextOpen(!contextOpen)}
-                            className="w-full flex items-center justify-between px-4 py-2 text-xs transition-colors"
-                            style={{ color: hasContext ? '#00d4ff' : 'rgba(232,244,253,0.4)' }}
-                        >
-                            <div className="flex items-center gap-1.5">
-                                <MapPin size={11} />
-                                <span>Location Context {hasContext && '· Active'}</span>
-                            </div>
-                            {contextOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                        </button>
-                        <AnimatePresence>
-                            {contextOpen && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="overflow-hidden"
-                                >
-                                    <div className="grid grid-cols-3 gap-2 px-4 pb-3">
-                                        <input
-                                            type="number" step="0.01" placeholder="Lat"
-                                            value={lat} onChange={(e) => setLat(e.target.value)}
-                                            className="input-field text-xs py-1.5"
-                                        />
-                                        <input
-                                            type="number" step="0.01" placeholder="Lon"
-                                            value={lon} onChange={(e) => setLon(e.target.value)}
-                                            className="input-field text-xs py-1.5"
-                                        />
-                                        <input
-                                            type="number" step="0.1" placeholder="Range°"
-                                            value={rangeDeg} onChange={(e) => setRangeDeg(e.target.value)}
-                                            className="input-field text-xs py-1.5"
-                                        />
-                                    </div>
-                                    {hasContext && (
-                                        <div className="px-4 pb-2.5 text-[10px] font-medium" style={{ color: '#00d4ff' }}>
-                                            Context: {parseFloat(lat).toFixed(2)}°, {parseFloat(lon).toFixed(2)}° ±{parseFloat(rangeDeg)}°
-                                        </div>
-                                    )}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
+
 
                     {/* ── Messages ── */}
                     <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">

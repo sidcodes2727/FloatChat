@@ -1,62 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from './components/navbar';
 import Chatbot from './components/Chatbot';
-import Dashboard from './components/Dashboard';
+import ChatPlots from './components/ChatPlots';
 import Home from './components/Home';
-import OceanMap from './components/OceanMap';
-import MetricMap from './components/MetricMap';
-import GlobeMap from './components/GlobeMap';
-import VisualizationPanel from './components/VisualizationPanel';
 import { Bot, X } from 'lucide-react';
+
+const Dashboard = React.lazy(() => import('./components/Dashboard'));
+const OceanMap = React.lazy(() => import('./components/OceanMap'));
+const MetricMap = React.lazy(() => import('./components/MetricMap'));
+const GlobeMap = React.lazy(() => import('./components/GlobeMap'));
 
 function OceanVizApp() {
     const [chatOpen, setChatOpen] = useState(false);
     const [activePage, setActivePage] = useState('Home');
-    const [selectedCoords, setSelectedCoords] = useState(null); // { lat, lon } from map click
-    const [comparisonLocations, setComparisonLocations] = useState(null); // array of {lat,lon,label}
-    const [visPanelOpen, setVisPanelOpen] = useState(false);
+    const [chatPlotsData, setChatPlotsData] = useState(null);
+    const [chatInput, setChatInput] = useState('');
+    const mainScrollRef = useRef(null);
 
     const isFullScreenMap = ['Argo Floats', 'Salinity', 'Temperature', 'Pressure', '3D Globe'].includes(activePage);
+
+    const handleMapClick = (lat, lon) => {
+        setChatInput(`Tell me about the ocean at lat ${lat.toFixed(2)}, lon ${lon.toFixed(2)}`);
+        setChatOpen(true);
+    };
 
     return (
         <div className="h-screen flex flex-col text-white w-full overflow-hidden" style={{ background: 'transparent' }}>
             <Navbar activePage={activePage} setActivePage={setActivePage} />
 
-            <div 
-                className="flex-1 relative transition-all duration-300 ease-out"
-                style={{ marginLeft: visPanelOpen ? '420px' : '0' }}
-            >
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={activePage}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -4 }}
-                        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-                        className={isFullScreenMap ? 'w-full h-full relative overflow-hidden' : 'w-full h-full relative overflow-y-auto'}
-                    >
-                    {activePage === 'Depth Profiles' && (
-                        <div
-                            className="rounded-xl mx-3 md:mx-5 my-3"
-                            style={{
-                                background: 'rgba(4, 12, 26, 0.4)',
-                                border: '1px solid rgba(0, 212, 255, 0.07)',
-                                backdropFilter: 'blur(8px)',
-                            }}
-                        >
-                            <Dashboard />
-                        </div>
-                    )}
-                    {activePage === 'Home' && <Home setActivePage={setActivePage} setChatOpen={setChatOpen} />}
-                    {activePage === 'Argo Floats' && <OceanMap setActivePage={setActivePage} onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setComparisonLocations(null); setVisPanelOpen(true); setChatOpen(true); }} />}
-                    {activePage === 'Salinity' && <MetricMap metric="salinity" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setComparisonLocations(null); setVisPanelOpen(true); setChatOpen(true); }} />}
-                    {activePage === 'Temperature' && <MetricMap metric="temperature" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setComparisonLocations(null); setVisPanelOpen(true); setChatOpen(true); }} />}
-                    {activePage === 'Pressure' && <MetricMap metric="pressure" onPointClick={(lat, lon) => { setSelectedCoords({ lat, lon }); setComparisonLocations(null); setVisPanelOpen(true); setChatOpen(true); }} />}
-                    {activePage === '3D Globe' && <GlobeMap />}
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={activePage}
+                    ref={mainScrollRef}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                    className={isFullScreenMap ? 'flex-1 relative overflow-hidden' : 'flex-1 relative overflow-y-auto overflow-x-hidden'}
+                    id="main-scroller"
+                >
+                    <Suspense fallback={<div className="flex h-full items-center justify-center text-sm font-semibold tracking-wider text-[#00d4ff]/60 uppercase">Loading Module...</div>}>
+                        {activePage === 'Depth Profiles' && (
+                            <div
+                                className="rounded-xl mx-3 md:mx-5 my-3"
+                                style={{
+                                    background: 'rgba(4, 12, 26, 0.4)',
+                                    border: '1px solid rgba(0, 212, 255, 0.07)',
+                                    backdropFilter: 'blur(8px)',
+                                }}
+                            >
+                                <Dashboard />
+                            </div>
+                        )}
+                        {activePage === 'Home' && <Home setActivePage={setActivePage} setChatOpen={setChatOpen} mainScrollRef={mainScrollRef} />}
+                        {activePage === 'Argo Floats' && <OceanMap setActivePage={setActivePage} onMapClick={handleMapClick} />}
+                        {activePage === 'Salinity' && <MetricMap metric="salinity" onMapClick={handleMapClick} />}
+                        {activePage === 'Temperature' && <MetricMap metric="temperature" onMapClick={handleMapClick} />}
+                        {activePage === 'Pressure' && <MetricMap metric="pressure" onMapClick={handleMapClick} />}
+                        {activePage === '3D Globe' && <GlobeMap onMapClick={handleMapClick} />}
+                    </Suspense>
                 </motion.div>
-                </AnimatePresence>
-            </div>
+            </AnimatePresence>
+
+            <ChatPlots data={chatPlotsData} onClose={() => setChatPlotsData(null)} />
 
             {/* ── Chatbot FAB ── */}
             <motion.button
@@ -118,30 +125,11 @@ function OceanVizApp() {
             </motion.button>
 
             <Chatbot 
-                chatOpen={chatOpen} 
-                setChatOpen={setChatOpen} 
-                selectedCoords={selectedCoords} 
-                onDataVisualized={(lat, lon) => {
-                    setSelectedCoords({ lat, lon });
-                    setComparisonLocations(null);
-                    setVisPanelOpen(true);
-                }}
-                onCompareLocations={(locations) => {
-                    setComparisonLocations(locations);
-                    setSelectedCoords(null);
-                    setVisPanelOpen(true);
-                }}
-            />
-
-            {/* Side Panel: supports single location and multi-location comparison */}
-            <VisualizationPanel 
-                coords={visPanelOpen ? selectedCoords : null} 
-                comparisonLocations={visPanelOpen ? comparisonLocations : null}
-                onClose={() => {
-                    setVisPanelOpen(false);
-                    setSelectedCoords(null);
-                    setComparisonLocations(null);
-                }} 
+               chatOpen={chatOpen} 
+               setChatOpen={setChatOpen} 
+               chatInput={chatInput} 
+               setChatInput={setChatInput}
+               setChatPlotsData={setChatPlotsData} 
             />
         </div>
     );

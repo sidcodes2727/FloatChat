@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { motion } from 'framer-motion';
-import { Activity, Thermometer, Droplets, Layers, SlidersHorizontal, TrendingUp } from 'lucide-react';
+import { Activity, Thermometer, Droplets, Layers, SlidersHorizontal, TrendingUp, Download } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 import { API_BASE } from '../config';
 
-import { LineChart, StatCard } from './Charts';
+import { LineChart, StatCard } from './ChartWidgets';
 
 /* ─── Dashboard ─── */
 function Dashboard() {
@@ -12,9 +15,11 @@ function Dashboard() {
     const [records, setRecords] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [isExporting, setIsExporting] = useState(false);
+    const dashboardRef = useRef(null);
 
-    const [lat, setLat] = useState(0);
-    const [lon, setLon] = useState(0);
+    const [lat, setLat] = useState('0');
+    const [lon, setLon] = useState('0');
     const [rangeDeg, setRangeDeg] = useState('');
 
     useEffect(() => {
@@ -36,16 +41,18 @@ function Dashboard() {
     }, []);
 
     useEffect(() => {
-        const rangeNum = typeof rangeDeg === 'string' ? parseFloat(rangeDeg) : rangeDeg;
-        const hasFinite = Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(rangeNum);
+        const latNum = parseFloat(lat);
+        const lonNum = parseFloat(lon);
+        const rangeNum = rangeDeg === '' ? 5 : parseFloat(rangeDeg);
+        const hasFinite = Number.isFinite(latNum) && Number.isFinite(lonNum) && Number.isFinite(rangeNum);
         if (!hasFinite) { setRecords(allRecords); return; }
         let aborted = false;
         async function fetchProfiles() {
             try {
                 setLoading(true);
                 const url = new URL(`${API_BASE}/profiles`);
-                url.searchParams.set('lat', String(lat));
-                url.searchParams.set('lon', String(lon));
+                url.searchParams.set('lat', String(latNum));
+                url.searchParams.set('lon', String(lonNum));
                 url.searchParams.set('rangeDeg', String(rangeNum));
                 const res = await fetch(url.toString());
                 const data = await res.json();
@@ -82,6 +89,101 @@ function Dashboard() {
         console.log('Series sizes -> temp:', tempData.length, 'sal:', salData.length, 'oxy:', oxyData.length);
     }, [tempData, salData, oxyData]);
 
+    const exportToPDF = async () => {
+        setIsExporting(true);
+        try {
+            const pdf = new jsPDF('p', 'pt', 'a4');
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            
+            // 1. Header and Metadata
+            const currentDateTime = new Date().toLocaleString();
+            
+            pdf.setFontSize(12);
+            pdf.setTextColor(120, 120, 120);
+            pdf.text('FloatChat Analytics', 40, 35);
+            
+            const dateWidth = pdf.getStringUnitWidth(currentDateTime) * pdf.internal.getFontSize();
+            pdf.text(currentDateTime, pageWidth - 40 - dateWidth, 35);
+            
+            pdf.setFontSize(24);
+            pdf.setTextColor(0, 150, 200); // Ocean blue
+            pdf.text('Ocean Depth Profiles Report', 40, 60);
+            
+            pdf.setDrawColor(0, 150, 200);
+            pdf.setLineWidth(1.5);
+            pdf.line(40, 75, pageWidth - 40, 75);
+            
+            pdf.setFontSize(11);
+            pdf.setTextColor(60, 60, 60);
+            pdf.text(`Location: ${lat}°, ${lon}°`, 40, 100);
+            pdf.text(`Search Radius: ${rangeDeg || 5}°`, 240, 100);
+            
+            pdf.text(`Total Records: ${total.toLocaleString()}`, 40, 120);
+            pdf.text(`Max Depth: ${maxDepth.toFixed(0)} m`, 240, 120);
+            
+            pdf.text(`Avg Temperature: ${avgTemp.toFixed(2)} °C`, 40, 140);
+            pdf.text(`Avg Salinity: ${avgSal.toFixed(2)} PSU`, 240, 140);
+            
+            // 2. Data Table (Limit to 150 rows)
+            const tableData = filtered.slice(0, 150).map(r => [
+                r.depth ? Number(r.depth).toFixed(1) : '-',
+                r.temperature ? Number(r.temperature).toFixed(2) : '-',
+                r.salinity ? Number(r.salinity).toFixed(2) : '-',
+                r.oxygen ? Number(r.oxygen).toFixed(2) : '-'
+            ]);
+            
+            autoTable(pdf, {
+                startY: 160,
+                head: [['Depth (m)', 'Temperature (°C)', 'Salinity (PSU)', 'Oxygen']],
+                body: tableData,
+                theme: 'striped',
+                headStyles: { fillColor: [0, 150, 200] },
+                styles: { fontSize: 9, cellPadding: 4 },
+                margin: { top: 40, right: 40, bottom: 40, left: 40 }
+            });
+            
+            // 3. Append Charts
+            const chartIds = ['chart-temp', 'chart-sal', 'chart-oxy'];
+            let currentY = 50;
+            pdf.addPage();
+            
+            for (let i = 0; i < chartIds.length; i++) {
+                const chartElement = document.getElementById(chartIds[i]);
+                if (chartElement) {
+                    if (currentY > 500) {
+                        pdf.addPage();
+                        currentY = 50;
+                    }
+                    
+                    pdf.setFontSize(14);
+                    pdf.setTextColor(40, 40, 40);
+                    
+                    let title = "Chart";
+                    if (chartIds[i] === 'chart-temp') title = "Temperature Profile Overview";
+                    if (chartIds[i] === 'chart-sal') title = "Salinity Profile Overview";
+                    if (chartIds[i] === 'chart-oxy') title = "Oxygen Profile Overview";
+                    
+                    pdf.text(title, 40, currentY);
+                    
+                    const canvas = await html2canvas(chartElement, { scale: 2, backgroundColor: '#020813' });
+                    const imgData = canvas.toDataURL('image/png');
+                    const imgWidth = 460;
+                    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                    const xOffset = (pageWidth - imgWidth) / 2;
+                    
+                    pdf.addImage(imgData, 'PNG', xOffset, currentY + 15, imgWidth, imgHeight);
+                    currentY += imgHeight + 60;
+                }
+            }
+            
+            pdf.save('depth_profiles_report.pdf');
+        } catch (err) {
+            console.error('Failed to export PDF', err);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     return (
         <div className="p-4 md:p-6 space-y-5 max-w-7xl mx-auto">
 
@@ -105,19 +207,30 @@ function Dashboard() {
                     >
                         Filter by Location
                     </h3>
-                    <div
-                        className="ml-auto text-xs px-2.5 py-1 rounded-full"
-                        style={{ background: 'rgba(0,212,255,0.08)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.15)' }}
-                    >
-                        {filtered.length} records
+                    <div className="ml-auto flex items-center gap-3">
+                        <div
+                            className="text-xs px-2.5 py-1 rounded-full"
+                            style={{ background: 'rgba(0,212,255,0.08)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.15)' }}
+                        >
+                            {filtered.length} records
+                        </div>
+                        <button
+                            onClick={exportToPDF}
+                            disabled={isExporting}
+                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md cursor-pointer transition-colors"
+                            style={{ background: '#00d4ff', color: '#020813', fontWeight: 600, border: 'none', opacity: isExporting ? 0.7 : 1 }}
+                        >
+                            <Download size={14} />
+                            {isExporting ? 'Exporting...' : 'Export PDF'}
+                        </button>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
                     {[
-                        { label: 'Latitude', value: lat, onChange: e => setLat(parseFloat(e.target.value)), step: '0.01', type: 'number' },
-                        { label: 'Longitude', value: lon, onChange: e => setLon(parseFloat(e.target.value)), step: '0.01', type: 'number' },
-                        { label: 'Range (°)', value: rangeDeg, onChange: e => { const v = e.target.value; setRangeDeg(v === '' ? '' : parseFloat(v)); }, step: '0.1', placeholder: 'No filter', type: 'number' },
+                        { label: 'Latitude', value: lat, onChange: e => setLat(e.target.value), step: '0.01', type: 'number' },
+                        { label: 'Longitude', value: lon, onChange: e => setLon(e.target.value), step: '0.01', type: 'number' },
+                        { label: 'Range (°)', value: rangeDeg, onChange: e => setRangeDeg(e.target.value), step: '0.1', placeholder: 'No filter', type: 'number' },
                     ].map(f => (
                         <div key={f.label}>
                             <label
@@ -214,6 +327,7 @@ function Dashboard() {
                 >
                     {tempData.length > 0 ? (
                         <LineChart
+                            id="chart-temp"
                             title="Temperature vs Depth"
                             data={tempData}
                             color="#f97316"
@@ -230,6 +344,7 @@ function Dashboard() {
 
                     {salData.length > 0 ? (
                         <LineChart
+                            id="chart-sal"
                             title="Salinity vs Depth"
                             data={salData}
                             color="#7c3aed"
@@ -246,6 +361,7 @@ function Dashboard() {
 
                     {oxyData.length > 0 ? (
                         <LineChart
+                            id="chart-oxy"
                             title="Oxygen vs Depth"
                             data={oxyData}
                             color="#22c55e"
